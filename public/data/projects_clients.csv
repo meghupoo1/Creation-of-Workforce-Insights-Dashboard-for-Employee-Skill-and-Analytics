@@ -1,0 +1,5 @@
+project_id,project_name,client_id,client_name,billing_rate,department_id,project_status
+PRJ001,Platform reliability,CLI001,Northstar Cloud,145,D003,Active
+PRJ002,Experience redesign,CLI002,Meridian Retail,125,D004,Active
+PRJ003,Global campaign,CLI003,Atlas Foods,95,D002,Active
+PRJ004,Field deployment,CLI004,Summit Health,110,D005,Active

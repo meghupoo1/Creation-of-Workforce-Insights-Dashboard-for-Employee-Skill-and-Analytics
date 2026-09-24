@@ -1,0 +1,9 @@
+review_id,employee_id,review_period,kpi_score,goal_completion_pct,productivity_score,quality_score,collaboration_score,overall_score,performance_band,manager_comment,review_status
+REV001,E001,2026-Q3,92,88,90,94,96,92,Exceeds,Strong compliance leadership,Published
+REV002,E002,2026-Q3,78,82,80,76,84,80,Meets,Consistent campaign delivery,Published
+REV003,E003,2026-Q3,95,94,96,93,91,94,Exceeds,Excellent technical ownership,Published
+REV004,E004,2026-Q3,87,90,86,88,89,88,Exceeds,Strong design outcomes,Published
+REV005,E005,2026-Q3,71,68,70,74,76,72,Developing,Needs clearer delivery planning,Published
+REV006,E006,2026-Q3,91,93,89,92,95,92,Exceeds,Strong coaching and delivery,Published
+REV007,E007,2026-Q3,83,79,84,87,88,84,Meets,Research quality is improving,Published
+REV008,E008,2026-Q3,86,85,87,89,82,86,Meets,Reliable financial reporting,Published

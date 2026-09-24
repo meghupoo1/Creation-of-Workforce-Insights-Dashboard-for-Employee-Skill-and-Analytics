@@ -1,0 +1,6 @@
+notification_id,recipient_employee_id,notification_type,channel,event_date,severity,title,message,delivery_status,action_url
+NT001,E002,Shift reminder,Microsoft Teams,2026-09-08T07:00:00Z,Info,Shift starts in 2 hours,Your India day shift starts at 09:00,Delivered,/shifts/SH002
+NT002,E006,Leave approval,Email,2026-09-09T10:15:00Z,Action,Leave request needs review,Jordan has submitted a leave request,Delivered,/leave/LV003
+NT003,E001,Attendance anomaly,Slack,2026-09-08T10:00:00Z,High,Unusual check-in detected,Daniel checked in outside the approved geofence,Delivered,/attendance/AT005
+NT004,E007,Attendance alert,Push,2026-09-08T09:45:00Z,Warning,Late arrival detected,Your arrival is 42 minutes after shift start,Delivered,/attendance/AT007
+NT005,E011,Birthday reminder,Outlook,2026-09-12T08:00:00Z,Info,Team birthday reminder,Priya has a birthday this week,Scheduled,/people/E011

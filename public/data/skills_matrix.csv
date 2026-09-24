@@ -1,0 +1,7 @@
+skill_record_id,employee_id,skill_name,skill_category,current_level,target_level,years_experience,certification,skill_gap_score,last_assessed,training_recommendation
+SK001,E003,Cloud architecture,Technical,Expert,Expert,8,AWS Solutions Architect,0,2026-08-20,None
+SK002,E004,Design systems,Technical,Advanced,Expert,4,Figma Systems,18,2026-08-22,Advanced design systems workshop
+SK003,E007,User research,Professional,Intermediate,Advanced,2,UX Research Certificate,24,2026-08-22,Mentored research program
+SK004,E010,Industrial safety,Compliance,Intermediate,Advanced,3,OSHA 30,31,2026-08-18,Field safety refresher
+SK005,E002,Marketing analytics,Technical,Advanced,Expert,5,GA4 Certification,12,2026-08-21,Advanced analytics lab
+SK006,E011,Content strategy,Professional,Intermediate,Advanced,2,Content Marketing Certificate,28,2026-08-21,Strategic content training

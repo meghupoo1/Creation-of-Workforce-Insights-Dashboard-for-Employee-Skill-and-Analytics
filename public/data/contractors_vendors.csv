@@ -1,0 +1,4 @@
+worker_id,employee_id_or_vendor,worker_name,vendor_name,worker_type,department_id,contract_start,contract_end,rate_type,rate,compliance_status,manager_id
+CW001,E005,Daniel Wong,West Coast Workforce,Contractor,D005,2025-02-03,2026-12-31,Hourly,42,Compliant,E001
+CW002,E010,Lucas Martin,FieldOps Partners,Contractor,D005,2021-07-12,2026-12-31,Hourly,38,Compliant,E001
+CW003,,Rapid Install Crew,Summit Staffing,Vendor,D005,2026-09-01,2026-10-31,Fixed,18000,Pending,E001

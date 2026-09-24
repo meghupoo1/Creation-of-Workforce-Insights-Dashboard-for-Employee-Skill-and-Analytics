@@ -1,0 +1,7 @@
+audit_id,event_timestamp,actor_id,actor_role,action,resource_type,resource_id,ip_address,mfa_verified,result,retention_class
+AUD001,2026-09-08T08:10:00Z,E001,HR_ADMIN,Export payroll report,Payroll,PAY-EXPORT-2026-08,10.20.1.14,true,Success,Financial-7Y
+AUD002,2026-09-08T08:20:00Z,E006,MANAGER,Approve leave request,Leave,LV001,10.20.4.21,true,Success,HR-3Y
+AUD003,2026-09-08T08:25:00Z,E003,MANAGER,View team attendance,Attendance,TEAM-D003,10.20.3.17,true,Success,HR-3Y
+AUD004,2026-09-08T08:44:00Z,E005,EMPLOYEE,Update profile,Employee,E005,172.16.2.41,false,Success,HR-3Y
+AUD005,2026-09-08T09:12:00Z,system,AI_SERVICE,Flag attendance anomaly,Attendance,AT005,10.20.0.5,true,Success,Audit-7Y
+AUD006,2026-09-08T09:18:00Z,unknown,UNKNOWN,Failed login,Authentication,LOGIN,198.51.100.24,false,Blocked,Security-2Y

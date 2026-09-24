@@ -1,0 +1,11 @@
+employee_id,E_Name,department,attrition_rate,previous_attrition_rate,attrition_trend,payroll_status,gross_pay,net_pay
+1,Alex Rivera,HR,7.4,8.1,Down,Processed,6200,4980
+2,Aarav Sharma,Marketing,9.2,8.7,Up,Processed,5400,4320
+3,Jordan Miller,Engineering,6.1,7.0,Down,Processed,7800,6240
+4,Sofia Kim,Product,8.8,8.8,Stable,Processed,6900,5520
+5,Daniel Wong,Operations,11.6,10.3,Up,Pending,4800,0
+6,Leah Park,Design,5.3,6.4,Down,Processed,6100,4880
+7,Maya Roberts,Design,7.9,8.0,Stable,Processed,7300,5840
+8,Chris Evans,Engineering,4.8,5.7,Down,Processed,8200,6560
+9,Nina Patel,Finance,10.1,9.4,Up,Pending,5700,0
+10,Sam Wilson,Customer Success,6.7,7.5,Down,Processed,5100,4080

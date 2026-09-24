@@ -1,0 +1,6 @@
+shift_id,shift_name,shift_type,start_time,end_time,break_minutes,location_id,required_headcount,rotation_group,overtime_multiplier,status
+SH001,Core day,Fixed,09:00,17:30,60,L001,6,ROT-A,1.5,Published
+SH002,India day,Fixed,09:00,17:30,60,L002,3,ROT-B,1.5,Published
+SH003,Design flex,Rotational,09:00,17:30,60,L001,3,ROT-A,1.5,Published
+SH004,Field early,Rotational,08:00,16:30,30,L003,3,ROT-C,2.0,Published
+SH005,Evening support,Rotational,13:00,21:30,60,L001,2,ROT-D,1.5,Draft

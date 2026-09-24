@@ -1,0 +1,6 @@
+holiday_id,holiday_date,holiday_name,location_id,holiday_type,paid
+HOL001,2026-10-02,Gandhi Jayanti,L002,Public,true
+HOL002,2026-11-26,Thanksgiving,L001,Public,true
+HOL003,2026-12-25,Christmas,L001,Public,true
+HOL004,2026-12-25,Christmas,L002,Public,true
+HOL005,2026-09-07,Labor Day,L001,Public,true

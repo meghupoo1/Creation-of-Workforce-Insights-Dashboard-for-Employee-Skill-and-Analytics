@@ -1,0 +1,13 @@
+employee_id,employee_code,first_name,last_name,email,phone,department_id,role,access_role,manager_id,location_id,hire_date,employment_status,worker_type,timezone,mfa_enabled,profile_completion
+E001,EMP-001,Alex,Rivera,alex.rivera@northstar.example,+1-555-0101,D001,HR Administrator,HR_ADMIN,,L001,2022-04-18,Active,Employee,America/New_York,true,96
+E002,EMP-002,Aarav,Sharma,aarav.sharma@northstar.example,+1-555-0102,D002,Marketing Specialist,EMPLOYEE,E006,L002,2024-01-08,Active,Employee,Asia/Kolkata,true,88
+E003,EMP-003,Jordan,Miller,jordan.miller@northstar.example,+1-555-0103,D003,Senior Engineer,MANAGER,E001,L001,2021-09-13,Active,Employee,America/New_York,true,94
+E004,EMP-004,Sofia,Kim,sofia.kim@northstar.example,+1-555-0104,D004,Product Designer,EMPLOYEE,E006,L001,2023-06-19,Active,Employee,America/New_York,true,91
+E005,EMP-005,Daniel,Wong,daniel.wong@northstar.example,+1-555-0105,D005,Operations Coordinator,EMPLOYEE,E001,L003,2025-02-03,Active,Contractor,America/Los_Angeles,false,78
+E006,EMP-006,Maya,Roberts,maya.roberts@northstar.example,+1-555-0106,D004,Design Manager,MANAGER,E001,L001,2020-11-02,Active,Employee,America/New_York,true,99
+E007,EMP-007,Leah,Park,leah.park@northstar.example,+1-555-0107,D004,UX Researcher,EMPLOYEE,E006,L001,2024-08-26,Active,Employee,America/New_York,true,85
+E008,EMP-008,Noah,Patel,noah.patel@northstar.example,+1-555-0108,D006,Finance Analyst,EMPLOYEE,E001,L002,2023-03-27,Active,Employee,Asia/Kolkata,true,93
+E009,EMP-009,Emma,Johnson,emma.johnson@northstar.example,+1-555-0109,D003,QA Engineer,EMPLOYEE,E003,L001,2022-12-05,Active,Employee,America/New_York,true,90
+E010,EMP-010,Lucas,Martin,lucas.martin@northstar.example,+1-555-0110,D005,Field Technician,EMPLOYEE,E001,L003,2021-07-12,Active,Employee,America/Los_Angeles,true,87
+E011,EMP-011,Priya,Nair,priya.nair@northstar.example,+1-555-0111,D002,Content Strategist,EMPLOYEE,E002,L002,2025-05-19,Active,Employee,Asia/Kolkata,true,82
+E012,EMP-012,Olivia,Chen,olivia.chen@northstar.example,+1-555-0112,D006,Payroll Analyst,EMPLOYEE,E001,L001,2024-10-14,Active,Employee,America/New_York,true,97

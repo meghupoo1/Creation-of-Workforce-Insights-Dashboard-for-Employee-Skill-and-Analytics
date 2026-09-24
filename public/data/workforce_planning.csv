@@ -1,0 +1,6 @@
+forecast_id,forecast_month,location_id,department_id,projected_demand_hours,current_capacity_hours,coverage_gap_hours,staffing_recommendation,workforce_utilization_pct,attrition_risk_pct,absence_risk_pct,priority,model_version
+FC001,2026-10,L001,D003,1240,1080,160,Hire 2 senior engineers,87,6.1,9.4,High,forecast-v2.4
+FC002,2026-10,L001,D004,920,840,80,Upskill 1 designer and approve contractor,91,7.9,12.2,Medium,forecast-v2.4
+FC003,2026-10,L002,D002,760,810,-50,Reallocate 1 content specialist,94,9.2,8.1,Low,forecast-v2.4
+FC004,2026-10,L003,D005,690,560,130,Add 2 field technicians,88,11.6,15.5,High,forecast-v2.4
+FC005,2026-10,L001,D006,510,540,-30,Maintain current staffing,82,5.8,6.3,Low,forecast-v2.4

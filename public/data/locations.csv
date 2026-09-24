@@ -1,0 +1,4 @@
+location_id,location_name,address,timezone,latitude,longitude,geofence_radius_m,active
+L001,New York HQ,100 Hudson Street New York NY,America/New_York,40.7128,-74.0060,150,true
+L002,Bengaluru Hub,12 Residency Road Bengaluru IN,Asia/Kolkata,12.9716,77.5946,200,true
+L003,Los Angeles Field Office,550 Hope Street Los Angeles CA,America/Los_Angeles,34.0522,-118.2437,250,true

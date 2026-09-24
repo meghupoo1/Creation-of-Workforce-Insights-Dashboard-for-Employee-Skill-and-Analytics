@@ -1,0 +1,8 @@
+assignment_id,employee_id,shift_id,work_date,assignment_source,swap_status,swap_requested_by,swap_approved_by,skills_match,coverage_status
+SA001,E001,SH001,2026-09-08,Automatic,None,,,100,Covered
+SA002,E002,SH002,2026-09-08,Automatic,None,,,92,Covered
+SA003,E003,SH001,2026-09-08,Manager assignment,None,,,98,Covered
+SA004,E004,SH003,2026-09-08,AI recommendation,Pending,E004,,96,Covered
+SA005,E005,SH004,2026-09-08,Automatic,Approved,E005,E001,88,Covered
+SA006,E007,SH003,2026-09-08,Automatic,None,,,91,Covered
+SA007,E010,SH004,2026-09-08,Automatic,None,,,85,Covered

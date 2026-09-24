@@ -1,0 +1,5 @@
+recommendation_id,employee_id,course_name,reason,priority,estimated_hours,due_date,completion_status,ai_confidence
+TR001,E004,Advanced design systems workshop,Design system skill gap,High,12,2026-10-15,Recommended,0.94
+TR002,E007,Mentored research program,Research competency gap,Medium,20,2026-11-01,Recommended,0.89
+TR003,E010,Field safety refresher,Compliance certification renewal,High,6,2026-09-30,Assigned,0.98
+TR004,E011,Strategic content training,Marketing demand forecast,Medium,10,2026-10-30,Recommended,0.86

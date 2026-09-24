@@ -1,0 +1,13 @@
+attendance_id,employee_id,attendance_date,check_in,check_out,attendance_method,location_id,gps_latitude,gps_longitude,shift_id,late_minutes,overtime_minutes,status,ai_validation,anomaly_type,anomaly_score,notes
+AT001,E001,2026-09-08,08:57,17:31,biometric,L001,40.7127,-74.0061,SH001,0,1,Present,Validated,None,0.01,
+AT002,E002,2026-09-08,09:18,18:04,QR,L002,12.9715,77.5947,SH002,18,4,Late,Review,Late arrival,0.66,Traffic delay reported
+AT003,E003,2026-09-08,09:01,17:42,face_recognition,L001,40.7128,-74.0060,SH001,1,12,Present,Validated,None,0.02,
+AT004,E004,2026-09-08,09:05,17:30,GPS,L001,40.7130,-74.0062,SH003,5,0,Present,Validated,None,0.03,
+AT005,E005,2026-09-08,,,GPS,L003,34.0822,-118.2436,SH004,0,0,Absent,Flagged,Outside geofence,0.91,Check-in 3 km from approved site
+AT006,E006,2026-09-08,08:49,17:15,biometric,L001,40.7128,-74.0060,SH001,0,0,Present,Validated,None,0.01,
+AT007,E007,2026-09-08,09:42,18:12,face_recognition,L001,40.7128,-74.0060,SH003,42,12,Late,Flagged,Repeated late arrival,0.84,
+AT008,E008,2026-09-08,09:00,17:30,QR,L002,12.9716,77.5946,SH002,0,0,Present,Validated,None,0.01,
+AT009,E009,2026-09-08,08:55,17:29,biometric,L001,40.7128,-74.0060,SH003,0,0,Present,Validated,None,0.01,
+AT010,E010,2026-09-08,07:58,16:30,GPS,L003,34.0521,-118.2438,SH004,0,0,Present,Validated,None,0.02,
+AT011,E011,2026-09-08,,,QR,L002,,,SH002,0,0,On Leave,Validated,Approved leave,0.01,Annual leave
+AT012,E012,2026-09-08,09:03,17:35,face_recognition,L001,40.7128,-74.0060,SH001,3,5,Present,Validated,None,0.02,

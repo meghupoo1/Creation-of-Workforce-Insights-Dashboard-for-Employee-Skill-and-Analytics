@@ -1,0 +1,6 @@
+leave_id,employee_id,leave_type,start_date,end_date,total_days,reason,request_date,approval_status,approved_by,approval_date,paid_leave
+LV001,E011,Annual,2026-09-08,2026-09-10,3,Personal travel,2026-08-28,Approved,E002,2026-08-29,true
+LV002,E005,Sick,2026-09-10,2026-09-10,1,Medical appointment,2026-09-09,Pending,,,true
+LV003,E007,Personal,2026-09-14,2026-09-16,3,Family event,2026-09-05,Pending,,,false
+LV004,E004,Annual,2026-10-02,2026-10-03,2,Vacation,2026-09-01,Approved,E006,2026-09-02,true
+LV005,E010,Unpaid,2026-09-21,2026-09-22,2,Personal commitment,2026-09-03,Rejected,E001,2026-09-04,false

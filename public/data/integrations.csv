@@ -1,0 +1,10 @@
+integration_id,provider,category,connection_status,last_sync_at,sync_direction,records_synced,owner,health
+INT001,Microsoft Teams,Collaboration,Connected,2026-09-08T08:30:00Z,Bidirectional,248,E001,Healthy
+INT002,Slack,Collaboration,Connected,2026-09-08T08:32:00Z,Outbound,84,E001,Healthy
+INT003,Outlook,Calendar,Connected,2026-09-08T08:35:00Z,Bidirectional,132,E001,Healthy
+INT004,Google Workspace,Identity,Connected,2026-09-08T08:40:00Z,Inbound,12,E001,Healthy
+INT005,Active Directory,Identity,Connected,2026-09-08T08:45:00Z,Bidirectional,12,E001,Healthy
+INT006,SAP,ERP,Connected,2026-09-08T08:50:00Z,Bidirectional,34,E001,Healthy
+INT007,Oracle HRMS,HRIS,Warning,2026-09-07T23:20:00Z,Inbound,10,E001,Credentials expiring
+INT008,PayrollPro,Payroll,Connected,2026-09-08T08:55:00Z,Outbound,12,E012,Healthy
+INT009,BioSecure,Biometric,Connected,2026-09-08T09:00:00Z,Inbound,428,E001,Healthy

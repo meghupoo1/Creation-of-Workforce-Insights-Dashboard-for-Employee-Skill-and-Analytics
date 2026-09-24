@@ -1,0 +1,7 @@
+department_id,department_name,department_head_id,cost_center,headcount_target,monthly_budget,location_id
+D001,Human Resources,E001,HR-100,4,42000,L001
+D002,Marketing,E002,MKT-200,5,58000,L002
+D003,Engineering,E003,ENG-300,8,112000,L001
+D004,Product Design,E006,DES-400,6,76000,L001
+D005,Operations,E001,OPS-500,5,62000,L003
+D006,Finance,E001,FIN-600,4,51000,L001
