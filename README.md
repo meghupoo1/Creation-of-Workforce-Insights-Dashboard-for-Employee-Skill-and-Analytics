@@ -1,5 +1,27 @@
 # React + Vite
 
+## Deploy to Render
+
+The Render Blueprint in `render.yaml` creates a Docker web service and a persistent PostgreSQL database. It uses Render's paid Starter web service and Basic PostgreSQL plan. Review the plan and billing details in Render before confirming deployment.
+
+1. Push this repository to GitHub, then in Render select **New > Blueprint** and connect the repository.
+2. Enter a unique password of at least 8 characters when Render prompts for `ADMIN_INITIAL_PASSWORD`. The blueprint generates a persistent `JWT_SECRET_KEY`.
+3. After the service is live, open its Shell and import the approved demo dataset:
+
+   ```sh
+   python backend/scripts/import_data.py
+   ```
+
+4. The imported demo administrator (`ADMIN_EMAIL`) initially has the `HR_ADMIN` role. Promote that account to `SYSTEM_ADMIN` from the Render Shell:
+
+   ```sh
+   python -c "from sqlalchemy import text; from backend.database.database import engine; conn = engine.connect(); conn.execute(text(\"UPDATE employees SET access_role = 'SYSTEM_ADMIN' WHERE email = 'alex.rivera@northstar.example'\")); conn.commit(); conn.close()"
+   ```
+
+5. Sign in with that email and the `ADMIN_INITIAL_PASSWORD` value. The first successful sign-in stores the password hash in PostgreSQL.
+
+The frontend and API are served from the same origin. The sample CSV files in `public/data/` are copied into the production site and are publicly downloadable; deploy only datasets approved for public access. If you use a different Render domain, update `ALLOWED_ORIGINS` in the service environment to match it. Do not use the sample admin credentials or sample data for a real workforce deployment. For real data, provision an authorized `ADMIN` or `SYSTEM_ADMIN` employee and set `ADMIN_EMAIL` to that employee before enabling admin bootstrap.
+
 ## AWS S3 dataset storage
 
 The CDK analytics stack creates a versioned, encrypted S3 data-lake bucket. After deploying it, set the bucket name from the `WorkforceDataLakeBucketName` stack output:
