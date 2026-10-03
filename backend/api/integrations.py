@@ -1,29 +1,34 @@
+import os
 from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
-
 from services.s3_storage import S3Storage
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
-INTEGRATIONS_LIST = [
-    {"name": "Biometric Devices", "type": "Attendance Hardware", "status": "Connected", "last_sync": "Real-time"},
-    {"name": "Microsoft Teams", "type": "Notification Channel", "status": "Connected", "last_sync": "5 min ago"},
-    {"name": "Slack", "type": "Notification Channel", "status": "Connected", "last_sync": "2 min ago"},
-    {"name": "Active Directory", "type": "Identity & Access (RBAC)", "status": "Synced", "last_sync": "1 hour ago"},
-    {"name": "SAP ERP", "type": "Enterprise Resource Planning", "status": "Connected", "last_sync": "12 hours ago"},
-    {"name": "Oracle HRMS", "type": "Core HR Records", "status": "Connected", "last_sync": "24 hours ago"},
-    {"name": "Google Workspace", "type": "Directory & Calendar", "status": "Connected", "last_sync": "10 min ago"}
-]
-
 @router.get("/")
 def get_integrations():
-    return INTEGRATIONS_LIST
+    storage = S3Storage()
+    s3_status = "Connected" if storage.enabled else "Configured"
+
+    from database.database import SQLALCHEMY_DATABASE_URL
+    db_name_label = "AWS RDS (PostgreSQL)" if ("postgres" in SQLALCHEMY_DATABASE_URL or os.getenv("RDS_HOSTNAME") or os.getenv("POSTGRES_HOST")) else "AWS RDS / PostgreSQL (Local Fallback)"
+
+    integrations_list = [
+        {"name": db_name_label, "type": "Core Relational Data Store", "status": "Connected", "last_sync": "Live"},
+        {"name": "AWS S3 Dataset Sync", "type": "Cloud Storage", "status": s3_status, "last_sync": "On-demand"},
+        {"name": "OpenAI / Bedrock API", "type": "LLM & AI Engine", "status": "Connected" if (os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY")) else "Demo/Mock", "last_sync": "Active"},
+        {"name": "Biometric & GPS Devices", "type": "Attendance Hardware", "status": "Demo/Mock", "last_sync": "Simulated"},
+        {"name": "Microsoft Teams", "type": "Notification Channel", "status": "Demo/Mock", "last_sync": "Simulated"},
+        {"name": "Slack", "type": "Notification Channel", "status": "Demo/Mock", "last_sync": "Simulated"},
+        {"name": "Active Directory (LDAP)", "type": "Identity & Access (RBAC)", "status": "Not configured", "last_sync": "Never"},
+        {"name": "SAP ERP", "type": "Enterprise Resource Planning", "status": "Not configured", "last_sync": "Never"},
+        {"name": "Oracle HRMS", "type": "Core HR Records", "status": "Demo/Mock", "last_sync": "Imported dataset"}
+    ]
+    return integrations_list
 
 @router.post("/trigger-sync")
 def trigger_system_sync(system_name: str):
-    return {"system": system_name, "status": "Sync triggered successfully", "timestamp": "Now"}
-
+    return {"system": system_name, "status": "Sync triggered successfully", "integration_status": "Demo/Mock execution"}
 
 @router.post("/s3/sync-datasets")
 def sync_datasets_to_s3():

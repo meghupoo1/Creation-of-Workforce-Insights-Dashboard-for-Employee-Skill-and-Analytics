@@ -36,10 +36,13 @@ class Employee(Base):
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
+    password_hash = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     department_id = Column(String, ForeignKey("departments.id"), nullable=True)
     role = Column(String)
     access_role = Column(String, default="EMPLOYEE") # HR_ADMIN, MANAGER, EMPLOYEE
+    base_salary = Column(Float, default=0.0)
+    experience_years = Column(Float, default=0.0)
     manager_id = Column(String, nullable=True)
     location_id = Column(String, ForeignKey("locations.id"), nullable=True)
     hire_date = Column(Date, nullable=True)
@@ -251,6 +254,14 @@ class SecurityAuditLog(Base):
     timestamp = Column(DateTime)
     status = Column(String, default="SUCCESS")
 
+class AuthSetupCode(Base):
+    __tablename__ = "auth_setup_codes"
+    id = Column(String, primary_key=True, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), index=True)
+    code_hash = Column(String, unique=True, index=True)
+    expires_at = Column(DateTime)
+    used_at = Column(DateTime, nullable=True)
+
 class BackupRecoveryCheck(Base):
     __tablename__ = "backup_recovery_checks"
     id = Column(String, primary_key=True, index=True)
@@ -267,3 +278,30 @@ class Integration(Base):
     category = Column(String)
     sync_status = Column(String, default="Connected")
     last_synced_at = Column(DateTime)
+
+class Allocation(Base):
+    __tablename__ = "allocation"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    employee_id = Column(String, index=True)
+    age = Column(Integer, nullable=True)
+    experience_years = Column(Float, nullable=True)
+    education_level = Column(String, nullable=True)
+    department = Column(String, nullable=True)
+    skill_level = Column(String, nullable=True)
+    technical_skill_score = Column(Float, nullable=True)
+    communication_score = Column(Float, nullable=True)
+    leadership_score = Column(Float, nullable=True)
+    problem_solving_score = Column(Float, nullable=True)
+    task_id = Column(String, nullable=True)
+    task_complexity = Column(String, nullable=True)
+    required_skill_level = Column(String, nullable=True)
+    deadline_days = Column(Integer, nullable=True)
+    workload_hours = Column(Float, nullable=True)
+    task_priority = Column(String, nullable=True)
+    team_size = Column(Integer, nullable=True)
+    previous_task_success_rate = Column(Float, nullable=True)
+    attendance_rate = Column(Float, nullable=True)
+    performance_rating = Column(Float, nullable=True)
+    idle_time_hours = Column(Float, nullable=True)
+    conflict_rate = Column(Float, nullable=True)
+    allocation_status = Column(String, nullable=True)

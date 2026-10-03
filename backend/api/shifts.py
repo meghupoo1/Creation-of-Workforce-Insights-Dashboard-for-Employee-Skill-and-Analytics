@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import date as DateType
 from database.database import get_db
 from database import models
+from api.notifications import create_notification
 
 router = APIRouter(prefix="/api/shifts", tags=["shifts"])
 
@@ -20,6 +21,7 @@ def create_shift(payload: dict = Body(...), db: Session = Depends(get_db)):
         start_time=payload.get("start_time", "09:00"),
         end_time=payload.get("end_time", "17:00"),
         break_minutes=int(payload.get("break_minutes", 60)),
+        location_id=payload.get("location_id"),
         required_headcount=int(payload.get("required_headcount", 1)),
         status=payload.get("status", "Published")
     )
@@ -57,6 +59,17 @@ def assign_shift(payload: dict = Body(...), db: Session = Depends(get_db)):
     db.add(assignment)
     db.commit()
     db.refresh(assignment)
+    employee = db.query(models.Employee).filter(models.Employee.id == employee_id).first()
+    shift = db.query(models.Shift).filter(models.Shift.id == shift_id).first()
+    if employee and shift:
+        create_notification(
+            db,
+            employee.id,
+            "SHIFT_ASSIGNED",
+            "New shift assigned",
+            f"{shift.shift_name} is scheduled for {assign_date.isoformat()} at {shift.start_time}-{shift.end_time}.",
+        )
+        db.commit()
     return assignment
 
 @router.get("/{shift_id}")

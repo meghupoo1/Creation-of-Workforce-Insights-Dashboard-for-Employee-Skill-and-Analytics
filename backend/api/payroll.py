@@ -57,9 +57,9 @@ def business_days(start_date, end_date):
 
 def _generate_payroll_records(payload: PayrollGenerationRequest, db: Session, only_missing=False):
     normalized, start_date, end_date = period_bounds(payload.pay_period)
-    employees = db.query(models.Employee).filter(models.Employee.employment_status.ilike("active")).all()
+    employees = db.query(models.Employee).all()
     if not employees:
-        raise HTTPException(status_code=409, detail="No active employees are available for payroll generation")
+        raise HTTPException(status_code=409, detail="No employees are available for payroll generation")
 
     working_days = payload.working_days or business_days(start_date, end_date)
     generated_records = []
@@ -82,6 +82,7 @@ def _generate_payroll_records(payload: PayrollGenerationRequest, db: Session, on
         ).all()
         present_days = sum(1 for row in attendance_rows if str(row.status or "").lower() in {"present", "late"})
         overtime_hours = sum(row.overtime_minutes or 0 for row in attendance_rows) / 60
+
         approved_leave = db.query(models.LeaveRequest).filter(
             models.LeaveRequest.employee_id == employee.id,
             models.LeaveRequest.status == "APPROVED",
@@ -89,10 +90,16 @@ def _generate_payroll_records(payload: PayrollGenerationRequest, db: Session, on
             models.LeaveRequest.end_date >= start_date,
         ).all()
         paid_leave_days = sum(as_number(row.total_days) for row in approved_leave)
-        unpaid_days = max(0.0, working_days - present_days - paid_leave_days)
-        daily_rate = base_salary / working_days
+
+        absent_days = sum(1 for row in attendance_rows if str(row.status or "").lower() == "absent")
+        unpaid_days = float(absent_days)
+
+        if present_days == 0 and absent_days == 0:
+            present_days = max(0, working_days - int(paid_leave_days))
+
+        daily_rate = base_salary / working_days if working_days > 0 else 0.0
         leave_deduction = round(unpaid_days * daily_rate, 2)
-        overtime_pay = round((base_salary / (working_days * 8)) * payload.overtime_multiplier * overtime_hours, 2)
+        overtime_pay = round((base_salary / (working_days * 8)) * payload.overtime_multiplier * overtime_hours, 2) if working_days > 0 else 0.0
         net_pay = round(base_salary - leave_deduction + overtime_pay + bonus, 2)
 
         if existing:

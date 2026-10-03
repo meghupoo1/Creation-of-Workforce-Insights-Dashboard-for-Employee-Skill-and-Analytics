@@ -1,95 +1,117 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from database.database import get_db
 from database import models
 from schemas import full_schemas as schemas
 
-router = APIRouter(prefix="/api/ai", tags=["ai_analytics"])
+from services.llm_service import llm_service
+from services.rag_service import rag_service
+from services.agent_service import agent_service
+from services.attrition_model import attrition_model_service
+from services.forecasting_model import forecasting_model_service
+from services.anomaly_detection import anomaly_detection_service
+from services.skill_gap_service import skill_gap_service
+from services.recommendation_service import (
+    performance_analytics_service,
+    diversity_analytics_service,
+    ai_recommendation_engine
+)
 
-@router.post("/attendance-anomalies", response_model=schemas.AIAnomalyResponse)
-def detect_anomaly(req: schemas.AIAnomalyRequest, db: Session = Depends(get_db)):
-    # Calculate anomaly logic based on location and check-in time
-    is_anomaly = False
-    score = 0.05
-    anomaly_type = "None"
-    recommendation = "Normal attendance event. No action required."
+router = APIRouter(tags=["ai_analytics"])
 
-    # Check for late time (after 09:15)
-    hour = int(req.check_in_time.split(":")[0]) if ":" in req.check_in_time else 9
-    minute = int(req.check_in_time.split(":")[1]) if ":" in req.check_in_time else 0
-
-    if hour > 9 or (hour == 9 and minute > 15):
-        is_anomaly = True
-        score = 0.65
-        anomaly_type = "Late arrival drift"
-        recommendation = "Send automated late arrival notification to employee and manager."
-
-    # Check for location drift
-    if abs(req.location_latitude - 40.7128) > 0.05 or abs(req.location_longitude - (-74.0060)) > 0.05:
-        is_anomaly = True
-        score = 0.92
-        anomaly_type = "Geofence perimeter mismatch"
-        recommendation = "Flag check-in location for HR manager review."
-
-    return schemas.AIAnomalyResponse(
-        employee_id=req.employee_id,
-        is_anomaly=is_anomaly,
-        anomaly_score=score,
-        anomaly_type=anomaly_type,
-        recommendation=recommendation
-    )
-
-@router.get("/attrition-risk")
-def predict_attrition(department: str = "Engineering", db: Session = Depends(get_db)):
-    return {
-        "department": department,
-        "attrition_risk_score": 12.4,
-        "risk_level": "Moderate",
-        "key_drivers": [
-            "High overtime hours in last 3 weeks",
-            "Below-average leave utilization",
-            "Skill gap in senior roles"
-        ],
-        "suggested_actions": [
-            "Reallocate 15% project workload to contractor pool",
-            "Schedule 1-on-1 retention sync with design leads",
-            "Approve pending annual leave requests"
-        ]
-    }
-
-@router.post("/forecast")
-def forecast_workforce_demand(months: int = 6):
-    return {
-        "forecast_period": f"Next {months} Months",
-        "predicted_headcount_needed": 142,
-        "current_headcount": 128,
-        "gap": 14,
-        "department_gaps": {
-            "Engineering": 6,
-            "Product Design": 4,
-            "Customer Success": 3,
-            "Operations": 1
-        },
-        "optimization_confidence": 0.94
-    }
-
-@router.post("/chatbot", response_model=schemas.AIChatResponse)
-def hr_chatbot(req: schemas.AIChatRequest):
-    q = req.query.lower()
-    
-    if "absent" in q or "attendance" in q:
-        answer = "Today's attendance rate is 91.7%. There are 9 team members present, 2 working remotely, and 1 on medical leave. 1 late arrival was detected."
-    elif "leave" in q or "vacation" in q:
-        answer = "You have 14.5 days of leave remaining (12 annual, 2.5 sick). You can submit a leave request directly from your Employee Self-Service portal."
-    elif "payroll" in q or "salary" in q:
-        answer = "August 2026 payroll input is 100% processed. Net payout calculated for 128 employees with zero unresolved deductions."
-    elif "attrition" in q or "risk" in q:
-        answer = "Overall workforce attrition risk is low (12.4%). Engineering department shows a slight workload alert due to consecutive overtime."
-    else:
-        answer = f"I am your AI Workforce Assistant. I can help with queries regarding attendance, leave balances, shift schedules, payroll status, and attrition forecasting. How can I assist you with '{req.query}'?"
-
+# --- 1. AI Chatbot & Agentic Tool Workflow ---
+@router.post("/api/ai/chatbot", response_model=schemas.AIChatResponse)
+def hr_chatbot(req: schemas.AIChatRequest, db: Session = Depends(get_db)):
+    """Agentic AI Workforce Chatbot using Tool Calling & RAG Pipeline."""
+    agent_output = agent_service.process_query(req.query, db)
     return schemas.AIChatResponse(
-        answer=answer,
-        confidence=0.98,
-        related_metrics={"attendance_rate": "91.7%", "leave_balance": "14.5 days", "payroll_status": "Processed"}
+        answer=agent_output["answer"],
+        confidence=0.96,
+        related_metrics={
+            "executed_tools": agent_output["executed_tools"],
+            "grounded_with_rag": agent_output["rag_context"]["grounded"]
+        }
     )
+
+# --- 2. RAG Document Retrieval Endpoint ---
+@router.post("/api/ai/rag-query")
+def rag_document_query(req: schemas.AIChatRequest):
+    """Direct Retrieval-Augmented Generation query over HR policy documents."""
+    return rag_service.answer_query(req.query)
+
+# --- 3. ML Attrition Risk Prediction Endpoint ---
+@router.get("/api/ai/attrition-risk")
+@router.get("/api/attrition/risk")
+def predict_attrition(department: str = "Engineering", db: Session = Depends(get_db)):
+    """Real Random Forest ML Model for Attrition Prediction."""
+    return attrition_model_service.predict_attrition(department=department)
+
+@router.get("/api/attrition/evaluation")
+def get_attrition_model_evaluation():
+    """Model evaluation metrics (Accuracy, Precision, Recall, F1, ROC-AUC, Confusion Matrix)."""
+    return attrition_model_service.evaluation_metrics
+
+# --- 4. Workforce Forecasting Endpoint ---
+@router.post("/api/ai/forecast")
+@router.get("/api/forecast")
+@router.post("/api/forecast")
+def forecast_workforce_demand(months: int = 6, db: Session = Depends(get_db)):
+    """Real Time-Series Regression Model for Workforce Demand Forecasting."""
+    return forecasting_model_service.forecast_demand(months=months, db=db)
+
+# --- 5. ML Attendance Anomaly Detection & Absenteeism ---
+@router.post("/api/ai/attendance-anomalies", response_model=schemas.AIAnomalyResponse)
+def detect_anomaly(req: schemas.AIAnomalyRequest, db: Session = Depends(get_db)):
+    """Real Isolation Forest ML model for attendance anomaly detection."""
+    result = anomaly_detection_service.detect_anomaly(
+        employee_id=req.employee_id,
+        check_in_time=req.check_in_time,
+        lat=req.location_latitude,
+        lng=req.location_longitude
+    )
+    return schemas.AIAnomalyResponse(
+        employee_id=result["employee_id"],
+        is_anomaly=result["is_anomaly"],
+        anomaly_score=result["anomaly_score"],
+        anomaly_type=result["anomaly_type"],
+        recommendation=result["recommendation"]
+    )
+
+@router.get("/api/ai/absenteeism-prediction")
+def predict_absenteeism(employee_id: str = "E001", db: Session = Depends(get_db)):
+    """Real ML Model for Absenteeism Prediction."""
+    return anomaly_detection_service.predict_absenteeism(employee_id=employee_id, db=db)
+
+# --- 6. Skill Gap & Personalized Training ---
+@router.get("/api/skills/gap-analysis")
+def analyze_skill_gap(employee_id: str = "E001", db: Session = Depends(get_db)):
+    """Analyzes employee skill gaps against role requirements."""
+    return skill_gap_service.analyze_skill_gap(employee_id=employee_id, db=db)
+
+@router.get("/api/training/recommendations")
+def get_training_recommendations(employee_id: str = "E001", db: Session = Depends(get_db)):
+    """Generates and retrieves personalized training recommendations."""
+    analysis = skill_gap_service.analyze_skill_gap(employee_id=employee_id, db=db)
+    return {
+        "employee_id": employee_id,
+        "recommendations": analysis["training_recommendations"]
+    }
+
+# --- 7. Dynamic Performance Analytics ---
+@router.get("/api/analytics/performance")
+def get_performance_analytics(db: Session = Depends(get_db)):
+    """Dynamic calculation of productivity and KPI completion metrics."""
+    return performance_analytics_service.get_performance_analytics(db)
+
+# --- 8. DEI & Workforce Diversity Analytics ---
+@router.get("/api/analytics/diversity")
+@router.get("/api/analytics/dei")
+def get_dei_analytics(db: Session = Depends(get_db)):
+    """Real demographic representation metrics across workforce dataset."""
+    return diversity_analytics_service.get_dei_analytics(db)
+
+# --- 9. AI Recommendation Engine ---
+@router.get("/api/ai/recommendations")
+def get_ai_recommendations(db: Session = Depends(get_db)):
+    """Dynamic AI recommendations for retention, hiring, staffing, training, and workload."""
+    return ai_recommendation_engine.generate_recommendations(db)

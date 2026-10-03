@@ -11,6 +11,8 @@ class EmployeeBase(BaseModel):
     department_id: Optional[str] = None
     role: str
     access_role: str = "EMPLOYEE"
+    base_salary: Optional[float] = None
+    experience_years: Optional[float] = 0.0
     manager_id: Optional[str] = None
     location_id: Optional[str] = None
     hire_date: Optional[date] = None
@@ -91,7 +93,7 @@ class AIAnomalyRequest(BaseModel):
     check_in_time: str
     location_latitude: float
     location_longitude: float
-    method: str
+    method: Optional[str] = "GPS"
 
 class AIAnomalyResponse(BaseModel):
     employee_id: str

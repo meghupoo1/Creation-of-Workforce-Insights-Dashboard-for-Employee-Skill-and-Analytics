@@ -6,6 +6,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect
+from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 from database import models
 from database.database import engine
 from database.mongodb import check_mongodb_connection
@@ -17,6 +23,21 @@ from api import (
 
 # Auto-create tables on startup
 models.Base.metadata.create_all(bind=engine)
+
+
+def ensure_employee_salary_column():
+    columns = {column["name"] for column in inspect(engine).get_columns("employees")}
+    with engine.begin() as connection:
+        if "base_salary" not in columns:
+            connection.exec_driver_sql("ALTER TABLE employees ADD COLUMN base_salary FLOAT DEFAULT 0.0")
+        if "experience_years" not in columns:
+            connection.exec_driver_sql("ALTER TABLE employees ADD COLUMN experience_years FLOAT DEFAULT 0.0")
+        if "password_hash" not in columns:
+            connection.exec_driver_sql("ALTER TABLE employees ADD COLUMN password_hash VARCHAR")
+
+
+ensure_employee_salary_column()
+employees.backfill_employee_compensation()
 
 app = FastAPI(
     title="AI-Powered Workforce Management API",

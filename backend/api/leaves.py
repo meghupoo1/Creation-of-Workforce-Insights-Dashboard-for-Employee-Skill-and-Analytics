@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import date as DateType
 from database.database import get_db
 from database import models
+from api.notifications import create_notification
 
 router = APIRouter(prefix="/api/leaves", tags=["leaves"])
 
@@ -15,6 +16,7 @@ def create_leave_request(payload: dict = Body(...), db: Session = Depends(get_db
     employee_id = payload.get("employee_id")
     if not employee_id:
         raise HTTPException(status_code=400, detail="employee_id is required")
+    employee = db.query(models.Employee).filter(models.Employee.id == employee_id).first()
 
     leave_id = f"LV-{db.query(models.LeaveRequest).count() + 1:03d}"
 
@@ -47,6 +49,15 @@ def create_leave_request(payload: dict = Body(...), db: Session = Depends(get_db
     db.add(leave)
     db.commit()
     db.refresh(leave)
+    if employee and employee.manager_id:
+        create_notification(
+            db,
+            employee.manager_id,
+            "LEAVE_REQUEST",
+            "Leave request needs review",
+            f"{employee.first_name} {employee.last_name} submitted a {leave.leave_type} leave request.",
+        )
+        db.commit()
     return leave
 
 @router.post("/approve/{leave_id}")
@@ -54,6 +65,13 @@ def approve_leave(leave_id: str, db: Session = Depends(get_db)):
     leave = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == leave_id).first()
     if leave:
         leave.status = "APPROVED"
+        create_notification(
+            db,
+            leave.employee_id,
+            "LEAVE_APPROVED",
+            "Leave request approved",
+            f"Your {leave.leave_type} leave request was approved.",
+        )
         db.commit()
         return {"status": "APPROVED", "leave_id": leave_id}
     return {"status": "NOT_FOUND"}

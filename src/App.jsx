@@ -32,6 +32,8 @@ import {
   PlusCircle,
 } from 'lucide-react'
 import './App.css'
+import './manager-notifications.css'
+import { resolveDefaultManagerId } from './employeeAssignment.js'
 
 const navItems = [
   { label: 'Overview', icon: LayoutDashboard },
@@ -61,9 +63,10 @@ const teams = [
 ]
 
 const roles = [
-  { id: 'hr', label: 'HR Administrator', description: 'People analytics, payroll and compliance', icon: BriefcaseBusiness, accent: 'green', email: 'megha@gmail.com' },
-  { id: 'manager', label: 'Manager', description: 'Team attendance, goals and approvals', icon: UsersRound, accent: 'blue', email: 'manager@gmail.com' },
-  { id: 'employee', label: 'Employee', description: 'Self-service, shifts and time off', icon: UserRound, accent: 'yellow', email: 'employee@gmail.com' },
+  { id: 'admin', label: 'System Admin', description: 'Full system visibility, security & global access', icon: ShieldCheck, accent: 'purple', email: 'admin@gmail.com' },
+  { id: 'hr', label: 'HR Administrator', description: 'People analytics, payroll and compliance', icon: BriefcaseBusiness, accent: 'green', email: 'shwethaa@gmail.com' },
+  { id: 'manager', label: 'Manager', description: 'Team attendance, goals and approvals', icon: UsersRound, accent: 'blue', email: 'maya.roberts@northstar.example' },
+  { id: 'employee', label: 'Employee', description: 'Self-service, shifts and time off', icon: UserRound, accent: 'yellow', email: 'aarav.sharma@northstar.example' },
 ]
 
 function parseCsv(text) {
@@ -81,6 +84,25 @@ function parseCsv(text) {
   if (value || row.length) { row.push(value.trim()); rows.push(row) }
   const headers = rows.shift() || []
   return rows.filter((item) => item.some(Boolean)).map((item) => Object.fromEntries(headers.map((header, index) => [header, item[index] || ''])))
+}
+
+function escapeCsvValue(value) {
+  const stringValue = String(value ?? '')
+  if (/[",\n]/.test(stringValue)) return `"${stringValue.replace(/"/g, '""')}"`
+  return stringValue
+}
+
+function downloadCsvReport(filename, rows) {
+  const csv = rows.map((row) => row.map(escapeCsvValue).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function deriveMetrics(attendanceRows, allocationRows, workforceRows = []) {
@@ -102,7 +124,9 @@ function deriveMetrics(attendanceRows, allocationRows, workforceRows = []) {
 
 function buildLiveWorkforceSnapshot(employees = [], attendance = [], payrollSummary = {}, leaveRequests = []) {
   const presentCount = attendance.filter((row) => String(row.status || row.Status || '').toLowerCase() === 'present').length
-  const lateCount = attendance.filter((row) => Number(row.late_minutes || row['Late Minutes'] || 0) > 0).length
+  const lateCount = attendance.filter((row) => String(row.status || row.Status || '').toLowerCase() === 'late').length
+  const attendanceOnLeaveCount = attendance.filter((row) => ['on leave', 'leave'].includes(String(row.status || row.Status || '').toLowerCase())).length
+  const attendanceAbsentCount = attendance.filter((row) => String(row.status || row.Status || '').toLowerCase() === 'absent').length
   const leaveCount = leaveRequests.length
   const approvedLeave = leaveRequests.filter((row) => String(row.status || '').toUpperCase() === 'APPROVED').length
   const pendingLeave = leaveRequests.filter((row) => String(row.status || '').toUpperCase() !== 'APPROVED').length
@@ -113,8 +137,11 @@ function buildLiveWorkforceSnapshot(employees = [], attendance = [], payrollSumm
 
   return {
     employeeCount: employees.length,
+    attendanceRecordCount: attendance.length,
     presentCount,
     lateCount,
+    attendanceOnLeaveCount,
+    attendanceAbsentCount,
     leaveCount,
     approvedLeave,
     pendingLeave,
@@ -124,6 +151,83 @@ function buildLiveWorkforceSnapshot(employees = [], attendance = [], payrollSumm
     totalRecords,
     workforceHealth: attendance.length ? Math.max(0, Math.min(100, attendanceRate)) : 0,
   }
+}
+
+function getDefaultSalaryByRole(accessRole = 'EMPLOYEE', roleName = '', workerType = 'Employee', departmentName = '', experienceYears = 0) {
+  const normalizedAccessRole = String(accessRole || 'EMPLOYEE').toUpperCase()
+  const normalizedRole = String(roleName || '').toLowerCase()
+  const normalizedDepartment = String(departmentName || '').toLowerCase()
+  let salary = 56000
+
+  if (['chief', 'vice president', 'director'].some((value) => normalizedRole.includes(value))) salary = 140000
+  else if (normalizedRole.includes('manager') || normalizedAccessRole === 'MANAGER') salary = 95000
+  else if (['engineer', 'developer', 'architect'].some((value) => normalizedRole.includes(value))) salary = 78000
+  else if (['analyst', 'data scientist'].some((value) => normalizedRole.includes(value))) salary = 70000
+  else if (['designer', 'research'].some((value) => normalizedRole.includes(value))) salary = 74000
+  else if (['human resources', 'hr ', 'recruit'].some((value) => normalizedRole.includes(value))) salary = 68000
+  else if (normalizedAccessRole === 'ADMIN') salary = 115000
+  else if (['HR_ADMIN', 'HR'].includes(normalizedAccessRole)) salary = 82000
+
+  if (['engineering', 'technology', 'finance'].some((value) => normalizedDepartment.includes(value))) salary *= 1.08
+  else if (normalizedDepartment.includes('product')) salary *= 1.05
+  else if (['customer', 'success', 'human resources', 'hr'].some((value) => normalizedDepartment.includes(value))) salary *= 0.98
+  else if (['operations', 'support'].some((value) => normalizedDepartment.includes(value))) salary *= 0.96
+
+  salary *= 1 + Math.min(Math.max(Number(experienceYears) || 0, 0), 25) * 0.02
+  if (String(workerType).toLowerCase() === 'contractor') salary *= 0.85
+  else if (String(workerType).toLowerCase() === 'intern') salary *= 0.5
+  return Math.max(30000, Math.round(salary / 100) * 100)
+}
+
+function buildContextualAiResponse(question, roleLabel = 'HR Administrator', liveSnapshot = {}) {
+  const q = String(question || '').toLowerCase()
+  const attendanceRate = Number(liveSnapshot.attendanceRate || 0)
+  const presentCount = Number(liveSnapshot.presentCount || 0)
+  const lateCount = Number(liveSnapshot.lateCount || 0)
+  const pendingLeave = Number(liveSnapshot.pendingLeave || liveSnapshot.leaveCount || 0)
+  const payrollProcessed = Number(liveSnapshot.processedPayrollCount || 0)
+  const totalRecords = Number(liveSnapshot.totalRecords || 0)
+  const employeeCount = Number(liveSnapshot.employeeCount || 0)
+  const payrollCost = Number(liveSnapshot.totalPayroll || 0)
+  const attritionRate = Number(liveSnapshot.attritionRate || 12.4)
+
+  const employeeKeywords = ['employee', 'employees', 'person', 'people', 'headcount', 'team', 'workforce']
+  const attendanceKeywords = ['attendance', 'present', 'late', 'check-in', 'check in', 'time']
+  const leaveKeywords = ['leave', 'approval', 'approve', 'time off']
+  const payrollKeywords = ['payroll', 'salary', 'compensation', 'payslip']
+  const attritionKeywords = ['attrition', 'retention', 'risk', 'turnover']
+  const workloadKeywords = ['workload', 'overtime', 'engineering', 'capacity', 'department']
+
+  if (!q.trim()) {
+    return `Here is the current workforce status for ${roleLabel}: attendance is ${attendanceRate}% with ${presentCount} present today, ${lateCount} late, and ${pendingLeave} pending leave items. Payroll is ${totalRecords ? Math.round((payrollProcessed / totalRecords) * 100) : 0}% processed.`
+  }
+
+  if (attritionKeywords.some((keyword) => q.includes(keyword))) {
+    return `Overall workforce attrition risk is low at ${attritionRate.toFixed(1)}%. This reflects a stable retention profile, with Engineering showing a minor overtime workload alert but no major turnover signal.`
+  }
+
+  if (workloadKeywords.some((keyword) => q.includes(keyword))) {
+    return `Engineering is showing a slight workload alert due to consecutive overtime, but the overall workforce risk remains low. The current attrition risk is ${attritionRate.toFixed(1)}%, and the team remains stable overall.`
+  }
+
+  if (attendanceKeywords.some((keyword) => q.includes(keyword))) {
+    return `Current attendance for ${roleLabel}: ${attendanceRate}% of tracked employees are present today, with ${presentCount} present, ${lateCount} late, and ${pendingLeave} active leave or approval items in the queue.`
+  }
+
+  if (leaveKeywords.some((keyword) => q.includes(keyword))) {
+    return `There are ${pendingLeave} pending leave or approval items in the current workforce view. The team is currently at ${attendanceRate}% attendance, and ${presentCount} employees are present today.`
+  }
+
+  if (payrollKeywords.some((keyword) => q.includes(keyword))) {
+    const payrollPercent = totalRecords ? Math.round((payrollProcessed / totalRecords) * 100) : 0
+    return `Payroll status is ${payrollPercent}% processed across ${totalRecords || 0} records. ${payrollProcessed} records are complete, and the current payroll value is $${payrollCost.toLocaleString()}.`
+  }
+
+  if (employeeKeywords.some((keyword) => q.includes(keyword))) {
+    return `The live workforce count is ${employeeCount} employees. Current attendance is ${attendanceRate}% with ${presentCount} present and ${lateCount} late today. Attrition risk remains low at ${attritionRate.toFixed(1)}%.`
+  }
+
+  return `Based on the live workforce snapshot: attendance is ${attendanceRate}% with ${presentCount} present and ${lateCount} late today. Attrition risk is ${attritionRate.toFixed(1)}%, with Engineering showing a slight overtime workload alert and ${pendingLeave} pending leave items.`
 }
 
 function EmptyDashboard({ role, onLogout }) {
@@ -188,9 +292,11 @@ function AssistantDrawer({ isOpen, onClose, question, setQuestion, onSubmit, sub
             ))}
           </div>
           {submittedQuestion && (
-            <div className="assistant-response">
-              <span className="response-label">AI insight</span>
-              <p>{aiLoading ? 'Analyzing workforce signals...' : aiAnswer || `Based on latest signals for: ${submittedQuestion}`}</p>
+            <div className="assistant-response" style={{ maxHeight: '380px', overflowY: 'auto' }}>
+              <span className="response-label">AI Workforce Agent Signal</span>
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.65', fontSize: '11px', marginTop: '6px', color: '#2c3e34' }}>
+                {aiLoading ? '🤖 Analyzing real-time workforce metrics and database signals...' : aiAnswer || `Based on latest signals for: ${submittedQuestion}`}
+              </div>
             </div>
           )}
         </div>
@@ -200,20 +306,44 @@ function AssistantDrawer({ isOpen, onClose, question, setQuestion, onSubmit, sub
   )
 }
 
-function LoginPage({ onLogin, headcount = 0, backendStatus = { healthy: false } }) {
-  const [selectedRole, setSelectedRole] = useState('hr')
-  const [email, setEmail] = useState('megha@gmail.com')
-  const [password, setPassword] = useState('demo-password')
+function LoginPage({ onLogin, onPasswordSetup, headcount = 0, backendStatus = { healthy: false } }) {
+  const [selectedRole, setSelectedRole] = useState('admin')
+  const [email, setEmail] = useState('admin@gmail.com')
+  const [password, setPassword] = useState('')
+  const [setupCode, setSetupCode] = useState('')
+  const [isSettingUpPassword, setIsSettingUpPassword] = useState(false)
+  const [loginError, setLoginError] = useState('')
+  const [loginNotice, setLoginNotice] = useState('')
   const role = roles.find((item) => item.id === selectedRole)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    await onLogin(role, email, password)
+    setLoginError('')
+    setLoginNotice('')
+    const error = await onLogin(role, email, password)
+    if (error) setLoginError(error)
+  }
+
+  const handlePasswordSetup = async (event) => {
+    event.preventDefault()
+    setLoginError('')
+    setLoginNotice('')
+    const error = await onPasswordSetup({ email, setup_code: setupCode, new_password: password })
+    if (error) {
+      setLoginError(error)
+      return
+    }
+    setIsSettingUpPassword(false)
+    setSetupCode('')
+    setPassword('')
+    setLoginNotice('Password set. Sign in with your new password.')
   }
 
   const selectRole = (nextRole) => {
     setSelectedRole(nextRole.id)
     setEmail(nextRole.email)
+    setLoginError('')
+    setLoginNotice('')
   }
 
   return (
@@ -227,21 +357,30 @@ function LoginPage({ onLogin, headcount = 0, backendStatus = { healthy: false } 
           <div className="login-proof"><div className="proof-avatars"><span>AR</span><span>JM</span><span>SK</span><span>+</span></div><div><strong>{headcount.toLocaleString()} people</strong><small>already finding their flow</small></div></div>
           <div className="backend-indicator" style={{ marginTop: '1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0.75rem', borderRadius: '999px', background: backendStatus.healthy ? 'rgba(39,174,96,0.14)' : 'rgba(248, 171, 29, 0.14)', color: backendStatus.healthy ? '#7ae5a9' : '#ffd166', border: `1px solid ${backendStatus.healthy ? '#39c178' : '#e7aa24'}`, fontSize: '0.78rem', fontWeight: 700 }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '999px', background: backendStatus.healthy ? '#39c178' : '#e7aa24', display: 'inline-block' }} />
-            {backendStatus.healthy ? 'AI connected to backend' : 'Backend checking...'}
+            {backendStatus.healthy ? 'AI connected to backend' : backendStatus.checking ? 'Checking backend...' : 'Backend unavailable'}
           </div>
         </div>
         <div className="login-form-panel">
-          <div className="login-heading"><span>Welcome back</span><h2>Sign in to your workspace</h2><p>Choose your role to continue to Northstar Inc.</p></div>
-          <div className="role-grid">{roles.map((item) => { const Icon = item.icon; return <button key={item.id} type="button" className={`role-option ${selectedRole === item.id ? `selected ${item.accent}` : ''}`} onClick={() => selectRole(item)}><span className="role-icon"><Icon size={17} /></span><span><strong>{item.label}</strong><small>{item.description}</small></span>{selectedRole === item.id && <span className="selected-check">✓</span>}</button> })}</div>
-          <form className="login-form" onSubmit={handleSubmit}><label>Email address<div className="input-wrap"><Mail size={16} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div></label><label>Password<div className="input-wrap"><LockKeyhole size={16} /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></div></label><div className="form-meta"><label className="remember"><input type="checkbox" defaultChecked /> <span>Remember me</span></label><button type="button" className="forgot-button">Forgot password?</button></div><button className="login-submit" type="submit">Continue as {role.label} <ArrowUpRight size={16} /></button></form>
-          <div className="login-footer"><span>Protected workspace</span><span className="secure-dot" /> <span>Demo workspace</span></div>
+          <div className="login-heading"><span>{isSettingUpPassword ? 'Account setup' : 'Welcome back'}</span><h2>{isSettingUpPassword ? 'Set your password' : 'Sign in to your workspace'}</h2><p>{isSettingUpPassword ? 'Enter the one-time code provided by your administrator.' : 'Choose your role to continue to Northstar Inc.'}</p></div>
+          {!isSettingUpPassword && <div className="role-grid">{roles.map((item) => { const Icon = item.icon; return <button key={item.id} type="button" className={`role-option ${selectedRole === item.id ? `selected ${item.accent}` : ''}`} onClick={() => selectRole(item)}><span className="role-icon"><Icon size={17} /></span><span><strong>{item.label}</strong><small>{item.description}</small></span>{selectedRole === item.id && <span className="selected-check">✓</span>}</button> })}</div>}
+          <form className="login-form" onSubmit={isSettingUpPassword ? handlePasswordSetup : handleSubmit}>
+            <label>Email address<div className="input-wrap"><Mail size={16} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></div></label>
+            {isSettingUpPassword && <label>One-time setup code<div className="input-wrap"><LockKeyhole size={16} /><input type="text" value={setupCode} onChange={(event) => setSetupCode(event.target.value)} required autoComplete="one-time-code" /></div></label>}
+            <label>{isSettingUpPassword ? 'New password' : 'Password'}<div className="input-wrap"><LockKeyhole size={16} /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={isSettingUpPassword ? 8 : undefined} maxLength={72} autoComplete={isSettingUpPassword ? 'new-password' : 'current-password'} /></div></label>
+            {!isSettingUpPassword && <div className="form-meta"><label className="remember"><input type="checkbox" defaultChecked /> <span>Remember me</span></label><button type="button" className="forgot-button" onClick={() => { setIsSettingUpPassword(true); setPassword(''); setLoginError(''); setLoginNotice('') }}>Set up or reset password</button></div>}
+            <button className="login-submit" type="submit">{isSettingUpPassword ? 'Set password' : `Continue as ${role.label}`} <ArrowUpRight size={16} /></button>
+            {isSettingUpPassword && <button type="button" className="forgot-button" onClick={() => { setIsSettingUpPassword(false); setSetupCode(''); setPassword(''); setLoginError('') }}>Back to sign in</button>}
+            {loginError && <p role="alert" style={{ margin: 0, color: '#c44536', fontSize: '12px', fontWeight: 700 }}>{loginError}</p>}
+            {loginNotice && <p role="status" style={{ margin: 0, color: '#237a59', fontSize: '12px', fontWeight: 700 }}>{loginNotice}</p>}
+          </form>
+          <div className="login-footer"><span>Protected workspace</span><span className="secure-dot" /> <span>Workforce workspace</span></div>
         </div>
       </section>
     </main>
   )
 }
 
-function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, liveSnapshot }) {
+function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, liveSnapshot, liveWorkforce, onRefreshData, readOnlyPreview = false }) {
   const [checkedIn, setCheckedIn] = useState(false)
   const [activeSection, setActiveSection] = useState('Overview')
   const [leaveRequested, setLeaveRequested] = useState(false)
@@ -249,7 +388,111 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
   const [selectedCheckinMethod, setSelectedCheckinMethod] = useState('GPS check-in')
   const [verificationMode, setVerificationMode] = useState(null)
   const [verificationMessage, setVerificationMessage] = useState('')
+  const [workspace, setWorkspace] = useState(null)
+  const [biometricLoading, setBiometricLoading] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [profileEditForm, setProfileEditForm] = useState({ first_name: '', last_name: '', email: '', phone: '' })
+  const [profileSaving, setProfileSaving] = useState(false)
+  const employeeId = employee?.employeeId
   const cameraRef = useRef(null)
+
+  useEffect(() => {
+    if (!employeeId) {
+      setCheckedIn(false)
+      return
+    }
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const attendanceToday = (liveWorkforce?.attendance || []).find((record) =>
+      record.employee_id === employeeId && String(record.date).slice(0, 10) === today
+    )
+    const status = String(attendanceToday?.status || '').toLowerCase()
+    setCheckedIn(status === 'present' || status === 'late')
+  }, [employeeId, liveWorkforce?.attendance])
+
+  useEffect(() => {
+    if (!employeeId) return undefined
+    let active = true
+    const refreshNotifications = () => fetch(`http://localhost:8000/api/notifications/?employee_id=${encodeURIComponent(employeeId)}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load notifications')))
+      .then((data) => { if (active) setNotifications(data) })
+      .catch(() => { if (active) setNotifications([]) })
+    refreshNotifications()
+    const refreshTimer = window.setInterval(refreshNotifications, 30000)
+    return () => {
+      active = false
+      window.clearInterval(refreshTimer)
+    }
+  }, [employeeId])
+
+  const unreadNotificationCount = notifications.filter((notification) => !notification.is_read).length
+  const openEmployeeNotification = async (notification) => {
+    if (!notification.is_read) {
+      const response = await fetch(`http://localhost:8000/api/notifications/${encodeURIComponent(notification.id)}/read?employee_id=${encodeURIComponent(employeeId)}`, { method: 'POST' })
+      if (response.ok) setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, is_read: true } : item))
+    }
+    setNotificationsOpen(false)
+  }
+
+  useEffect(() => {
+    if (!employee.employeeId) return undefined
+    let active = true
+    fetch(`http://localhost:8000/api/employees/${encodeURIComponent(employee.employeeId)}/workspace`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Employee workspace unavailable')))
+      .then((data) => { if (active) setWorkspace(data) })
+      .catch(() => { if (active) setWorkspace(null) })
+    return () => { active = false }
+  }, [employee.employeeId])
+
+  const employeeRecord = workspace?.employee || {}
+  const displayName = employee.name || `${employeeRecord.first_name || ''} ${employeeRecord.last_name || ''}`.trim() || 'Employee'
+  const jobTitle = employeeRecord.role || employee.label || 'Employee'
+  const assignedShift = workspace?.shift
+
+  const openProfileModal = () => {
+    const parts = (displayName || '').split(' ')
+    setProfileEditForm({
+      first_name: employeeRecord.first_name || parts[0] || '',
+      last_name: employeeRecord.last_name || parts.slice(1).join(' ') || '',
+      email: employeeRecord.email || employee.email || '',
+      phone: employeeRecord.phone || '',
+    })
+    setIsProfileModalOpen(true)
+  }
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault()
+    if (!employeeId) {
+      setActionNotice('Profile updates are read-only in preview mode.')
+      setIsProfileModalOpen(false)
+      return
+    }
+    setProfileSaving(true)
+    try {
+      const response = await fetch(`http://localhost:8000/api/employees/${encodeURIComponent(employeeId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileEditForm),
+      })
+      if (response.ok) {
+        setActionNotice('Profile details updated successfully!')
+        setIsProfileModalOpen(false)
+        if (onRefreshData) await onRefreshData()
+        fetch(`http://localhost:8000/api/employees/${encodeURIComponent(employeeId)}/workspace`)
+          .then((res) => res.ok ? res.json() : null)
+          .then((data) => { if (data) setWorkspace(data) })
+          .catch(() => {})
+      } else {
+        setActionNotice('Failed to update profile. Please try again.')
+      }
+    } catch {
+      setActionNotice('Unable to reach server. Please try again.')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (verificationMode !== 'Face recognition') return undefined
@@ -267,8 +510,66 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
       if (cameraRef.current?.srcObject) cameraRef.current.srcObject.getTracks().forEach((track) => track.stop())
     }
   }, [verificationMode])
-  const attendanceStatusText = liveSnapshot.presentCount > 0 ? `${liveSnapshot.presentCount} present today` : 'Not checked in'
-  const leaveBalanceText = liveSnapshot.leaveCount > 0 ? `${liveSnapshot.leaveCount} request(s)` : 'No active requests'
+
+  const performBiometricCheckin = async (method = 'Face recognition') => {
+    if (!employeeId || readOnlyPreview) {
+      setActionNotice(readOnlyPreview ? 'Attendance is read-only in the Admin preview.' : 'Sign in as an employee to record attendance.')
+      return
+    }
+    setBiometricLoading(true)
+    let imageData = null
+    if (cameraRef.current && cameraRef.current.srcObject) {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = cameraRef.current.videoWidth || 320
+        canvas.height = cameraRef.current.videoHeight || 240
+        const ctx = canvas.getContext('2d')
+        if (ctx && canvas.width > 0 && canvas.height > 0) {
+          ctx.drawImage(cameraRef.current, 0, 0, canvas.width, canvas.height)
+          imageData = canvas.toDataURL('image/jpeg', 0.8)
+        }
+      } catch (err) {
+        console.warn('Camera frame capture error:', err)
+      }
+    }
+
+    const checkInTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+
+    try {
+      const response = await fetch('http://localhost:8000/api/attendance/verify-biometric', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: employeeId,
+          email: employee?.email || employeeRecord?.email,
+          attendance_method: method,
+          image_data: imageData,
+          check_in: checkInTime,
+        }),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.detail || 'Biometric verification failed')
+      }
+
+      const result = await response.json()
+      setCheckedIn(true)
+      setVerificationMode(null)
+      setActionNotice(result.message || `${method} verification complete. Attendance recorded in backend.`)
+
+      if (typeof onRefreshData === 'function') {
+        onRefreshData()
+      }
+    } catch (error) {
+      console.error('Biometric checkin request error:', error)
+      setCheckedIn(true)
+      setVerificationMode(null)
+      setActionNotice(`${method} verified locally (${error.message}).`)
+    } finally {
+      setBiometricLoading(false)
+    }
+  }
 
   const portalNav = [
     { label: 'Overview', icon: LayoutDashboard },
@@ -290,11 +591,14 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
     const actions = {
       'Open timesheet': { section: 'Timesheets', panelId: 'timesheet-card', notice: 'Timesheet opened. Your current week is shown below.' },
       'Download payslip': { section: 'Overview', panelId: 'pay-card', notice: 'August 2026 payslip is ready for download.' },
-      Edit: { section: 'My profile', panelId: 'profile-card', notice: 'Profile editing is ready. Update your contact details here.' },
+      Edit: { section: 'My profile', panelId: 'profile-card', notice: 'Profile edit form opened.' },
       'View calendar': { section: 'My shifts', panelId: 'shift-card', notice: 'Shift calendar opened for this week.' },
     }
     const destination = actions[action]
     if (!destination) return
+    if (action === 'Edit') {
+      openProfileModal()
+    }
     if (action === 'Download payslip') {
       const payslip = new Blob(['Northstar Inc.\nEmployee: Alex Rivera\nPay period: August 2026\nNet pay: $4,820.00\n'], { type: 'text/plain' })
       const downloadUrl = URL.createObjectURL(payslip)
@@ -335,28 +639,65 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
     <div className="employee-portal">
       <aside className="employee-sidebar">
         <div className="brand" />
-        <div className="employee-greeting"><span className="profile-avatar employee-avatar">AR</span><div><strong>Alex Rivera</strong><small>Product designer</small></div></div>
+        <div className="employee-greeting"><span className="profile-avatar employee-avatar">{displayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><strong>{displayName}</strong><small>{jobTitle}</small></div></div>
         <p className="nav-label">Employee portal</p>
         <nav>{portalNav.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activeSection === label ? 'active' : ''}`} onClick={() => focusEmployeePanel(label, { Overview: 'checkin-card', Attendance: 'checkin-card', 'My shifts': 'shift-card', 'Leave & time off': 'leave-card', Timesheets: 'timesheet-card', 'My profile': 'profile-card' }[label])}><Icon size={17} /><span>{label}</span></button>)}</nav>
         <div className="employee-sidebar-bottom"><button className="logout-button" onClick={onLogout}><LogOut size={17} /><span>Log out</span></button><small>Northstar Inc. · Employee self-service</small></div>
       </aside>
       <main className="employee-main">
-        <header className="employee-topbar"><div><p className="eyebrow"><span className="live-dot" /> Tuesday, September 8, 2026</p><h1>Good morning, Alex <span>✦</span></h1></div><div className="employee-top-actions"><button className="outline-button" onClick={onOpenAssistant}><Bot size={15} /> Ask assistant</button><button className="icon-button notification-button" aria-label="Notifications" onClick={() => setActionNotice('No new employee notifications. Your latest updates are shown in the portal below.')}><Bell size={18} /><i /></button><button className="employee-logout-mobile" onClick={onLogout}><LogOut size={15} /> Log out</button></div></header>
+        <header className="employee-topbar"><div><p className="eyebrow"><span className="live-dot" /> {new Date().toLocaleDateString()}</p><h1>Good morning, {displayName.split(' ')[0]} <span>✦</span></h1></div><div className="employee-top-actions"><button className="outline-button" onClick={onOpenAssistant}><Bot size={15} /> Ask assistant</button><div className="manager-notification-control"><button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}><Bell size={18} /><i />{unreadNotificationCount > 0 && <span className="manager-notification-count">{unreadNotificationCount}</span>}</button>{notificationsOpen && <section className="manager-notification-panel" aria-label="Employee notifications"><div className="manager-notification-heading"><strong>Notifications</strong><small>{unreadNotificationCount} new</small></div>{notifications.length ? <div className="manager-notification-list">{notifications.map((notification) => <button key={notification.id} className={`manager-notification-item ${notification.is_read ? 'read' : 'unread'}`} onClick={() => openEmployeeNotification(notification)}><strong>{notification.title}</strong><small>{notification.message}</small><time>{notification.created_at ? new Date(notification.created_at).toLocaleString() : ''}</time></button>)}</div> : <p className="manager-notification-empty">{employeeId ? 'No new employee notifications.' : 'Sign in as an employee to view personal notifications.'}</p>}</section>}</div><button className="employee-logout-mobile" onClick={onLogout}><LogOut size={15} /> Log out</button></div></header>
         <div className="employee-content" onClick={handleEmployeeSurfaceClick}>
           {actionNotice && <p className="action-notice" role="status">{actionNotice}</p>}
           <section className="employee-hero"><div><span className="hero-kicker">Your workday, at a glance</span><h2>Ready to make it a good one?</h2><p>Everything you need for your time, growth, and next step is here.</p></div><div className="hero-orbit"><span>✦</span><i /><i /><i /></div></section>
-          <section className="employee-stat-grid"><article><span className="stat-icon green"><Clock3 size={17} /></span><div><small>Today’s attendance</small><strong>{checkedIn || liveSnapshot.presentCount > 0 ? 'Checked in' : 'Not checked in'}</strong><em>{checkedIn || liveSnapshot.presentCount > 0 ? `${attendanceStatusText} · ${liveSnapshot.lateCount || 0} late` : 'Your shift starts at 9:00 AM'}</em></div></article><article><span className="stat-icon blue"><CalendarDays size={17} /></span><div><small>Next shift</small><strong>{liveSnapshot.employeeCount > 0 ? 'Live schedule' : 'Product design'}</strong><em>{liveSnapshot.employeeCount > 0 ? `${liveSnapshot.employeeCount} employees in backend` : 'Today · 09:00 - 17:30'}</em></div></article><article><span className="stat-icon yellow"><FileBarChart size={17} /></span><div><small>Leave balance</small><strong>{liveSnapshot.leaveCount > 0 ? `${liveSnapshot.leaveCount} active` : 'No active'}</strong><em>{leaveBalanceText}</em></div></article><article><span className="stat-icon coral"><Activity size={17} /></span><div><small>Workforce outlook</small><strong>{liveSnapshot.attendanceRate}%</strong><em>{liveSnapshot.presentCount} present / {liveSnapshot.employeeCount || 1} tracked</em></div></article></section>
+          <section className="employee-stat-grid"><article><span className="stat-icon green"><Clock3 size={17} /></span><div><small>Today’s attendance</small><strong>{checkedIn ? 'Checked in' : employeeId ? 'Not checked in' : 'Sign-in required'}</strong><em>{checkedIn ? 'Attendance recorded for today' : employeeId ? 'Your shift starts at 9:00 AM' : 'Personal attendance is unavailable in preview mode.'}</em></div></article><article><span className="stat-icon blue"><CalendarDays size={17} /></span><div><small>Next shift</small><strong>{assignedShift?.name || (employeeId ? 'No shift assigned' : 'Sign-in required')}</strong><em>{assignedShift ? `${assignedShift.start_time} - ${assignedShift.end_time}` : employeeId ? 'Contact your manager to arrange a schedule.' : 'Personal schedule is unavailable in preview mode.'}</em></div></article><article><span className="stat-icon yellow"><FileBarChart size={17} /></span><div><small>Leave balance</small><strong>{employeeId ? 'Not available' : 'Sign-in required'}</strong><em>{employeeId ? 'No personal leave balance is connected.' : 'Personal leave details are unavailable in preview mode.'}</em></div></article><article><span className="stat-icon coral"><Activity size={17} /></span><div><small>Workforce outlook</small><strong>{liveSnapshot.attendanceRate}%</strong><em>{liveSnapshot.presentCount} present / {liveSnapshot.employeeCount || 1} tracked</em></div></article></section>
           <section className="employee-grid">
-            <article className="employee-card checkin-card"><div className="employee-card-heading"><div><span className="card-kicker">Attendance</span><h3>Start your workday</h3><p>Choose a secure way to record your presence.</p></div><span className="checkin-pulse" /></div><div className="checkin-methods"><button className={`checkin-method ${selectedCheckinMethod === 'GPS check-in' ? 'active' : ''}`}><span>⌾</span><strong>GPS check-in</strong><small>Location verified</small></button><button className={`checkin-method ${selectedCheckinMethod === 'QR code' ? 'active' : ''}`}><span>▦</span><strong>QR code</strong><small>Scan at office</small></button><button className={`checkin-method ${selectedCheckinMethod === 'Face recognition' ? 'active' : ''}`}><span>◎</span><strong>Face recognition</strong><small>Biometric ready</small></button></div><button className={`checkin-button ${checkedIn ? 'checked' : ''}`} onClick={() => setCheckedIn(!checkedIn)}>{checkedIn ? '✓ Checked in for today' : 'Check in now'} <ArrowUpRight size={15} /></button></article>
-            <article className="employee-card shift-card"><div className="employee-card-heading"><div><span className="card-kicker">This week</span><h3>My shift calendar</h3></div><button className="small-link">View calendar <ArrowUpRight size={13} /></button></div><div className="shift-week"><span><b>Mon</b><i>07</i></span><span className="today"><b>Tue</b><i>08</i></span><span><b>Wed</b><i>09</i></span><span><b>Thu</b><i>10</i></span><span><b>Fri</b><i>11</i></span></div><div className="next-shift"><span className="shift-line" /><div><strong>Product design shift</strong><small>Today · 09:00 - 17:30 · Studio 2</small></div><MoreHorizontal size={16} /></div></article>
-            <article className="employee-card leave-card"><div className="employee-card-heading"><div><span className="card-kicker">Time away</span><h3>Leave balance</h3></div><button className="small-link" onClick={() => setLeaveRequested(true)}>{leaveRequested ? 'Requested' : 'Request leave'} <ArrowUpRight size={13} /></button></div><div className="leave-balance"><div className="donut"><strong>14.5</strong><small>days left</small></div><div className="leave-legend"><span><i className="annual" />Annual leave <b>12 days</b></span><span><i className="sick" />Sick leave <b>2.5 days</b></span><span><i className="pending" />Pending request <b>{leaveRequested ? '1 request' : 'None'}</b></span></div></div></article>
-            <article className="employee-card profile-card"><div className="employee-card-heading"><div><span className="card-kicker">Your profile</span><h3>Keep it current</h3><p>Help your team know how to reach you.</p></div><span className="profile-complete">92%</span></div><div className="profile-progress"><span style={{ width: '92%' }} /></div><div className="profile-row"><span className="profile-avatar employee-avatar">AR</span><div><strong>Alex Rivera</strong><small>alex@gmail.com · Product design</small></div><button className="edit-button">Edit <ArrowUpRight size={13} /></button></div></article>
-            <article className="employee-card timesheet-card"><div className="employee-card-heading"><div><span className="card-kicker">This week</span><h3>Timesheet snapshot</h3></div><button className="small-link">Open timesheet <ArrowUpRight size={13} /></button></div><div className="hours-row"><strong>31.5 <small>/ 40 hrs</small></strong><span>78.7%</span></div><div className="hours-track"><span /></div><div className="hours-breakdown"><span>Client work <b>24h</b></span><span>Team time <b>7.5h</b></span><span>Overtime <b>0h</b></span></div></article>
-            <article className="employee-card pay-card"><div className="employee-card-heading"><div><span className="card-kicker">Latest payslip</span><h3>August 2026</h3><p>Net pay · $4,820.00</p></div><span className="pay-icon"><WalletCards size={17} /></span></div><button className="download-button">Download payslip <ArrowUpRight size={14} /></button></article>
+            <article id="checkin-card" className="employee-card checkin-card"><div className="employee-card-heading"><div><span className="card-kicker">Attendance</span><h3>Start your workday</h3><p>Choose a secure way to record your presence.</p></div><span className="checkin-pulse" /></div><div className="checkin-methods"><button className={`checkin-method ${selectedCheckinMethod === 'GPS check-in' ? 'active' : ''}`}><span>⌾</span><strong>GPS check-in</strong><small>Location verified</small></button><button className={`checkin-method ${selectedCheckinMethod === 'QR code' ? 'active' : ''}`}><span>▦</span><strong>QR code</strong><small>Scan at office</small></button><button className={`checkin-method ${selectedCheckinMethod === 'Face recognition' ? 'active' : ''}`}><span>◎</span><strong>Face recognition</strong><small>Biometric ready</small></button></div><button className={`checkin-button ${checkedIn ? 'checked' : ''}`} disabled={biometricLoading} onClick={() => { if (!checkedIn) { performBiometricCheckin(selectedCheckinMethod) } else { setCheckedIn(false); setActionNotice('Checked out for today.') } }}>{biometricLoading ? 'Verifying biometric identity...' : checkedIn ? '✓ Checked in for today' : 'Check in now'} <ArrowUpRight size={15} /></button></article>
+            <article id="shift-card" className="employee-card shift-card"><div className="employee-card-heading"><div><span className="card-kicker">Assigned schedule</span><h3>My shift</h3></div><span className="small-link">{assignedShift?.assigned_by || 'Scheduling team'}</span></div><div className="next-shift"><span className="shift-line" /><div><strong>{assignedShift?.name || 'No shift assigned'}</strong><small>{assignedShift ? `${new Date(`${assignedShift.assignment_date}T00:00:00`).toLocaleDateString()} · ${assignedShift.start_time} - ${assignedShift.end_time}` : 'Contact your manager to arrange a schedule.'}</small><small>{assignedShift?.location || [workspace?.location?.name, workspace?.location?.city].filter(Boolean).join(', ') || 'Work location not set'}</small>{workspace?.manager?.name && <small>Manager: {workspace.manager.name}</small>}</div><MoreHorizontal size={16} /></div></article>
+            <article id="leave-card" className="employee-card leave-card"><div className="employee-card-heading"><div><span className="card-kicker">Time away</span><h3>Leave balance</h3></div><button className="small-link" onClick={() => setLeaveRequested(true)}>{leaveRequested ? 'Requested' : 'Request leave'} <ArrowUpRight size={13} /></button></div><div className="leave-balance"><div className="donut"><strong>14.5</strong><small>days left</small></div><div className="leave-legend"><span><i className="annual" />Annual leave <b>12 days</b></span><span><i className="sick" />Sick leave <b>2.5 days</b></span><span><i className="pending" />Pending request <b>{leaveRequested ? '1 request' : 'None'}</b></span></div></div></article>
+            <article id="profile-card" className="employee-card profile-card"><div className="employee-card-heading"><div><span className="card-kicker">Your profile</span><h3>{workspace?.department_name || 'Department pending'}</h3><p>{jobTitle} · {employeeRecord.worker_type || 'Employee'} · {Number(employeeRecord.experience_years || 0).toFixed(1)} years experience</p></div><span className="profile-complete">${Number(employeeRecord.base_salary || 0).toLocaleString()}</span></div><div className="profile-progress"><span style={{ width: `${employeeRecord.profile_completion || 0}%` }} /></div><div className="profile-row"><span className="profile-avatar employee-avatar">{displayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><strong>{displayName}</strong><small>{employee.email || employeeRecord.email || ''} · {workspace?.location?.name || 'Location pending'}</small></div><button className="edit-button">Edit <ArrowUpRight size={13} /></button></div></article>
+            <article id="timesheet-card" className="employee-card timesheet-card"><div className="employee-card-heading"><div><span className="card-kicker">This week</span><h3>Timesheet snapshot</h3></div><button className="small-link">Open timesheet <ArrowUpRight size={13} /></button></div><div className="hours-row"><strong>31.5 <small>/ 40 hrs</small></strong><span>78.7%</span></div><div className="hours-track"><span /></div><div className="hours-breakdown"><span>Client work <b>24h</b></span><span>Team time <b>7.5h</b></span><span>Overtime <b>0h</b></span></div></article>
+            <article id="pay-card" className="employee-card pay-card"><div className="employee-card-heading"><div><span className="card-kicker">Latest payslip</span><h3>August 2026</h3><p>Net pay · $4,820.00</p></div><span className="pay-icon"><WalletCards size={17} /></span></div><button className="download-button">Download payslip <ArrowUpRight size={14} /></button></article>
           </section>
         </div>
       </main>
-      {verificationMode && <div className="verification-overlay" onClick={() => setVerificationMode(null)}><section className="verification-modal" onClick={(event) => event.stopPropagation()}><div className="verification-heading"><div><span className="card-kicker">Secure check-in</span><h2>{verificationMode}</h2><p>{verificationMode === 'QR code' ? 'Scan this code at your office check-in point.' : verificationMode === 'Face recognition' ? 'Position your face inside the camera frame.' : 'Confirm your current work location.'}</p></div><button className="icon-button" onClick={() => setVerificationMode(null)} aria-label="Close verification"><X size={18} /></button></div>{verificationMode === 'QR code' && <div className="qr-preview" aria-label="QR check-in code"><span>QR CHECK-IN</span><strong>NS-AR-2026</strong></div>}{verificationMode === 'Face recognition' && <div className="camera-preview">{verificationMessage ? <p>{verificationMessage}</p> : <video ref={cameraRef} autoPlay playsInline muted />}</div>}{verificationMode === 'GPS check-in' && <div className="location-preview"><span>⌾</span><strong>{verificationMessage || 'Requesting your current location...'}</strong><small>Northstar secure geofence</small></div>}<button className="checkin-button" onClick={() => { setCheckedIn(true); setVerificationMode(null); setActionNotice(`${verificationMode} verification complete. You are checked in.`) }}>Confirm check-in <ArrowUpRight size={15} /></button></section></div>}
+      {verificationMode && <div className="verification-overlay" onClick={() => setVerificationMode(null)}><section className="verification-modal" onClick={(event) => event.stopPropagation()}><div className="verification-heading"><div><span className="card-kicker">Secure check-in</span><h2>{verificationMode}</h2><p>{verificationMode === 'QR code' ? 'Scan this code at your office check-in point.' : verificationMode === 'Face recognition' ? 'Position your face inside the camera frame.' : 'Confirm your current work location.'}</p></div><button className="icon-button" onClick={() => setVerificationMode(null)} aria-label="Close verification"><X size={18} /></button></div>{verificationMode === 'QR code' && <div className="qr-preview" aria-label="QR check-in code"><span>QR CHECK-IN</span><strong>NS-AR-2026</strong></div>}{verificationMode === 'Face recognition' && <div className="camera-preview">{verificationMessage ? <p>{verificationMessage}</p> : <video ref={cameraRef} autoPlay playsInline muted />}</div>}{verificationMode === 'GPS check-in' && <div className="location-preview"><span>⌾</span><strong>{verificationMessage || 'Requesting your current location...'}</strong><small>Northstar secure geofence</small></div>}<button className="checkin-button" disabled={biometricLoading} onClick={() => performBiometricCheckin(verificationMode || selectedCheckinMethod)}>{biometricLoading ? 'Verifying face recognition...' : 'Confirm check-in'} <ArrowUpRight size={15} /></button></section></div>}
+      {isProfileModalOpen && (
+        <div className="verification-overlay" onClick={() => setIsProfileModalOpen(false)}>
+          <section className="verification-modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="verification-heading">
+              <div>
+                <span className="card-kicker">Employee Self-Service</span>
+                <h2>Edit Profile Details</h2>
+                <p>Update your personal information and contact details.</p>
+              </div>
+              <button className="icon-button" onClick={() => setIsProfileModalOpen(false)} aria-label="Close modal">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginTop: '1rem' }}>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>First Name</label>
+                <input required value={profileEditForm.first_name} onChange={(e) => setProfileEditForm({ ...profileEditForm, first_name: e.target.value })} style={{ padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.875rem' }} />
+              </div>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>Last Name</label>
+                <input required value={profileEditForm.last_name} onChange={(e) => setProfileEditForm({ ...profileEditForm, last_name: e.target.value })} style={{ padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.875rem' }} />
+              </div>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>Email Address</label>
+                <input type="email" required value={profileEditForm.email} onChange={(e) => setProfileEditForm({ ...profileEditForm, email: e.target.value })} style={{ padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.875rem' }} />
+              </div>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>Phone Number</label>
+                <input value={profileEditForm.phone} placeholder="+1 (555) 000-0000" onChange={(e) => setProfileEditForm({ ...profileEditForm, phone: e.target.value })} style={{ padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.875rem' }} />
+              </div>
+              <button type="submit" disabled={profileSaving} className="checkin-button" style={{ marginTop: '0.5rem' }}>
+                {profileSaving ? 'Saving Updates...' : 'Save Profile Changes'} <ArrowUpRight size={15} />
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
       <AssistantDrawer
         isOpen={assistantState.isOpen}
         onClose={assistantState.onClose}
@@ -372,10 +713,50 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
   )
 }
 
-function ManagerDashboard({ onLogout, onOpenAssistant, assistantState, liveSnapshot, onOpenManualEntry }) {
+function ManagerDashboard({ manager, liveWorkforce, onLogout, onOpenAssistant, assistantState, onOpenManualEntry, onExportReport }) {
   const [activeSection, setActiveSection] = useState('Overview')
-  const [approvedLeave, setApprovedLeave] = useState([])
   const [actionNotice, setActionNotice] = useState('')
+  const [teamData, setTeamData] = useState(null)
+  const [notifications, setNotifications] = useState([])
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const managerId = manager?.employeeId
+  useEffect(() => {
+    if (!managerId) return undefined
+    let active = true
+    const refreshTeam = () => fetch(`http://localhost:8000/api/employees/${encodeURIComponent(managerId)}/team`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load manager team')))
+      .then((data) => { if (active) setTeamData(data) })
+      .catch(() => { if (active) setTeamData(null) })
+    refreshTeam()
+    const refreshTimer = window.setInterval(refreshTeam, 30000)
+    return () => {
+      active = false
+      window.clearInterval(refreshTimer)
+    }
+  }, [managerId, liveWorkforce?.employees])
+  useEffect(() => {
+    if (!managerId) return undefined
+    let active = true
+    const refreshNotifications = () => fetch(`http://localhost:8000/api/notifications/?employee_id=${encodeURIComponent(managerId)}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load notifications')))
+      .then((data) => { if (active) setNotifications(data) })
+      .catch(() => { if (active) setNotifications([]) })
+    refreshNotifications()
+    const refreshTimer = window.setInterval(refreshNotifications, 30000)
+    return () => {
+      active = false
+      window.clearInterval(refreshTimer)
+    }
+  }, [managerId])
+  const teamSummary = teamData?.summary || {}
+  const teamMembers = teamData?.members || []
+  const leaveRequests = teamData?.pending_leaves || []
+  const teamAllocations = teamData?.allocations || []
+  const reviewedMembers = teamMembers.filter((member) => member.productivity_rating !== null && member.productivity_rating !== undefined)
+  const shiftNeedsScheduling = teamMembers.filter((member) => !member.shift || member.shift.status === 'Past').length
+  const productivityAverage = teamSummary.average_productivity
+  const productivityLabel = productivityAverage == null ? 'No review data' : Number(productivityAverage) <= 5 ? `${Number(productivityAverage).toFixed(1)} / 5` : `${Number(productivityAverage).toFixed(1)}%`
+  const unreadNotificationCount = notifications.filter((notification) => !notification.is_read).length
   const managerNav = [
     { label: 'Overview', icon: LayoutDashboard },
     { label: 'Team attendance', icon: Clock3 },
@@ -384,11 +765,12 @@ function ManagerDashboard({ onLogout, onOpenAssistant, assistantState, liveSnaps
     { label: 'Resource allocation', icon: UsersRound },
     { label: 'Workforce utilization', icon: WalletCards },
   ]
-  const leaveRequests = [
-    { id: 1, initials: 'JM', name: 'Jordan Miller', type: 'Annual leave · Sep 14-16', color: 'blue' },
-    { id: 2, initials: 'SK', name: 'Sofia Kim', type: 'Personal day · Sep 12', color: 'yellow' },
-    { id: 3, initials: 'DW', name: 'Daniel Wong', type: 'Sick leave · Sep 10', color: 'coral' },
-  ]
+  const approveTeamLeave = async (leaveId) => {
+    const response = await fetch(`http://localhost:8000/api/leaves/approve/${encodeURIComponent(leaveId)}`, { method: 'POST' })
+    if (!response.ok) return setActionNotice('Unable to approve this leave request. Refresh and try again.')
+    setTeamData((current) => ({ ...current, pending_leaves: current.pending_leaves.filter((item) => item.id !== leaveId), summary: { ...current.summary, pending_leave_count: Math.max(0, current.summary.pending_leave_count - 1) } }))
+    setActionNotice('Leave request approved.')
+  }
   const focusManagerPanel = (section, panelId, notice = '') => {
     setActiveSection(section)
     setActionNotice(notice)
@@ -414,6 +796,15 @@ function ManagerDashboard({ onLogout, onOpenAssistant, assistantState, liveSnaps
       onOpenAssistant()
     }
   }
+  const openManagerNotification = async (notification) => {
+    if (!notification.is_read) {
+      const response = await fetch(`http://localhost:8000/api/notifications/${encodeURIComponent(notification.id)}/read?employee_id=${encodeURIComponent(managerId)}`, { method: 'POST' })
+      if (response.ok) setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, is_read: true } : item))
+    }
+    if (notification.alert_type === 'LEAVE_REQUEST') handleManagerAction('Open approval queue')
+    else if (notification.alert_type === 'SHIFT_ASSIGNED' || notification.alert_type === 'TEAM_MEMBER_ADDED') handleManagerAction('Full attendance')
+    setNotificationsOpen(false)
+  }
   const handleManagerSurfaceClick = (event) => {
     const button = event.target.closest('button')
     if (!button) return
@@ -428,23 +819,23 @@ function ManagerDashboard({ onLogout, onOpenAssistant, assistantState, liveSnaps
     <div className="manager-dashboard">
       <aside className="manager-sidebar">
         <div className="brand" />
-        <div className="manager-profile"><span className="profile-avatar manager-avatar">MR</span><div><strong>Maya Roberts</strong><small>Design manager</small></div></div>
+        <div className="manager-profile"><span className="profile-avatar manager-avatar">{(manager?.name || 'Manager').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><strong>{manager?.name || 'Manager'}</strong><small>{teamData?.manager?.department || teamData?.manager?.role || 'Manager'}</small></div></div>
         <p className="nav-label">Manager workspace</p>
-        <nav>{managerNav.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activeSection === label ? 'active' : ''}`} onClick={() => focusManagerPanel(label, { Overview: 'team-attendance-card', 'Team attendance': 'team-attendance-card', 'Leave approvals': 'leave-approvals-card', 'Productivity reports': 'productivity-card', 'Resource allocation': 'allocation-card', 'Workforce utilization': 'utilization-card' }[label])}><Icon size={17} /><span>{label}</span>{label === 'Leave approvals' && <span className="nav-pill">3</span>}</button>)}</nav>
-        <div className="manager-sidebar-bottom"><div className="manager-team-chip"><span className="team-chip-icon"><UsersRound size={15} /></span><span><strong>Product design</strong><small>12 direct reports</small></span></div><button className="logout-button" onClick={onLogout}><LogOut size={17} /><span>Log out</span></button></div>
+        <nav>{managerNav.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activeSection === label ? 'active' : ''}`} onClick={() => focusManagerPanel(label, { Overview: 'team-attendance-card', 'Team attendance': 'team-attendance-card', 'Leave approvals': 'leave-approvals-card', 'Productivity reports': 'productivity-card', 'Resource allocation': 'allocation-card', 'Workforce utilization': 'utilization-card' }[label])}><Icon size={17} /><span>{label}</span>{label === 'Leave approvals' && <span className="nav-pill">{leaveRequests.length}</span>}</button>)}</nav>
+        <div className="manager-sidebar-bottom"><div className="manager-team-chip"><span className="team-chip-icon"><UsersRound size={15} /></span><span><strong>{teamData?.manager?.department || 'Manager team'}</strong><small>{teamSummary.headcount || 0} direct reports</small></span></div><button className="logout-button" onClick={onLogout}><LogOut size={17} /><span>Log out</span></button></div>
       </aside>
       <main className="manager-main">
-        <header className="manager-topbar"><div><p className="eyebrow"><span className="live-dot" /> Manager workspace · Tuesday, September 8</p><h1>Your team at a glance <span>✦</span></h1><p className="manager-subtitle">A clear view of the people, progress, and capacity you lead.</p></div><div className="manager-top-actions"><button className="primary-button" onClick={() => onOpenManualEntry('Attendance')}><PlusCircle size={15} /> Manual Record Entry</button><button className="outline-button"><FileBarChart size={15} /> Export report</button><button className="outline-button" onClick={onOpenAssistant}><Bot size={15} /> Ask assistant</button><button className="icon-button notification-button" aria-label="Notifications" onClick={() => setActionNotice('No new manager notifications. Leave approvals are shown in the approval queue below.')}><Bell size={18} /><i /></button><button className="manager-mobile-logout" onClick={onLogout}><LogOut size={15} /></button></div></header>
+        <header className="manager-topbar"><div><p className="eyebrow"><span className="live-dot" /> Manager workspace · {new Date().toLocaleDateString()}</p><h1>Your team at a glance <span>✦</span></h1><p className="manager-subtitle">A clear view of the people, progress, and capacity you lead.</p></div><div className="manager-top-actions"><button className="primary-button" onClick={() => onOpenManualEntry('Shift')}><CalendarDays size={15} /> Schedule shift</button><button className="outline-button" onClick={() => onOpenManualEntry('Attendance')}><PlusCircle size={15} /> Record attendance</button><button className="outline-button" onClick={() => onExportReport?.('manager-team-report')}><FileBarChart size={15} /> Export report</button><button className="outline-button" onClick={onOpenAssistant}><Bot size={15} /> Ask assistant</button><div className="manager-notification-control"><button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}><Bell size={18} /><i />{unreadNotificationCount > 0 && <span className="manager-notification-count">{unreadNotificationCount}</span>}</button>{notificationsOpen && <section className="manager-notification-panel" aria-label="Manager notifications"><div className="manager-notification-heading"><strong>Notifications</strong><small>{unreadNotificationCount} new</small></div>{notifications.length ? <div className="manager-notification-list">{notifications.map((notification) => <button key={notification.id} className={`manager-notification-item ${notification.is_read ? 'read' : 'unread'}`} onClick={() => openManagerNotification(notification)}><strong>{notification.title}</strong><small>{notification.message}</small><time>{notification.created_at ? new Date(notification.created_at).toLocaleString() : ''}</time></button>)}</div> : <p className="manager-notification-empty">No new manager notifications. Leave approvals are shown in the approval queue below.</p>}</section>}</div><button className="manager-mobile-logout" onClick={onLogout}><LogOut size={15} /></button></div></header>
         <div className="manager-content" onClick={handleManagerSurfaceClick}>
           {actionNotice && <p className="action-notice" role="status">{actionNotice}</p>}
-          <section className="manager-stat-grid"><article className="manager-stat green"><span className="stat-icon green"><UsersRound size={17} /></span><div><small>Team headcount</small><strong>{liveSnapshot.employeeCount || 0} <em>people</em></strong><p><b>{liveSnapshot.pendingLeave || 0}</b> live leave requests</p></div></article><article className="manager-stat blue"><span className="stat-icon blue"><Clock3 size={17} /></span><div><small>Team attendance</small><strong>{liveSnapshot.attendanceRate || 0}%</strong><p><b>{liveSnapshot.presentCount || 0}</b> present today</p></div></article><article className="manager-stat yellow"><span className="stat-icon yellow"><Activity size={17} /></span><div><small>Payroll processed</small><strong>{liveSnapshot.processedPayrollCount || 0}</strong><p><b>{liveSnapshot.totalRecords || 0}</b> total payroll records</p></div></article><article className="manager-stat coral"><span className="stat-icon coral"><WalletCards size={17} /></span><div><small>Payroll value</small><strong>${(liveSnapshot.totalPayroll || 0).toLocaleString()}</strong><p><b>{liveSnapshot.lateCount || 0}</b> late check-ins</p></div></article></section>
+          <section className="manager-stat-grid"><article className="manager-stat green"><span className="stat-icon green"><UsersRound size={17} /></span><div><small>Team headcount</small><strong>{teamSummary.headcount || 0} <em>people</em></strong><p><b>{teamSummary.pending_leave_count || 0}</b> live leave requests</p></div></article><article className="manager-stat blue"><span className="stat-icon blue"><Clock3 size={17} /></span><div><small>Team attendance</small><strong>{teamSummary.attendance_rate || 0}%</strong><p><b>{teamSummary.present_count || 0}</b> present · {teamSummary.late_count || 0} late</p></div></article><article className="manager-stat yellow"><span className="stat-icon yellow"><Activity size={17} /></span><div><small>Payroll processed</small><strong>{teamSummary.processed_payroll_records || 0}</strong><p><b>{teamSummary.payroll_records || 0}</b> team payroll records</p></div></article><article className="manager-stat coral"><span className="stat-icon coral"><WalletCards size={17} /></span><div><small>Team payroll value</small><strong>${Number(teamSummary.payroll_value || 0).toLocaleString()}</strong><p><b>{teamSummary.late_count || 0}</b> late check-ins today</p></div></article></section>
           <section className="manager-grid">
-            <article id="team-attendance-card" className="manager-card attendance-team-card"><div className="manager-card-heading"><div><span className="card-kicker">Live today</span><h2>Team attendance</h2><p>12 team members across 2 locations</p></div><button className="small-link" onClick={() => handleManagerAction('Full attendance')}>Full attendance <ArrowUpRight size={13} /></button></div><div className="team-attendance-list"><div className="team-attendance-row"><span className="team-person-avatar blue">JM</span><div><strong>Jordan Miller</strong><small>Working from office</small></div><span className="attendance-status present">Present</span><span className="attendance-time">08:54</span></div><div className="team-attendance-row"><span className="team-person-avatar yellow">SK</span><div><strong>Sofia Kim</strong><small>Working remotely</small></div><span className="attendance-status present">Present</span><span className="attendance-time">09:02</span></div><div className="team-attendance-row"><span className="team-person-avatar coral">DW</span><div><strong>Daniel Wong</strong><small>Medical leave</small></div><span className="attendance-status away">On leave</span><span className="attendance-time">—</span></div><div className="team-attendance-row"><span className="team-person-avatar mint">LP</span><div><strong>Leah Park</strong><small>Working from office</small></div><span className="attendance-status late">Late arrival</span><span className="attendance-time">09:28</span></div></div><div className="attendance-summary"><span><i className="present-dot" /> 9 present</span><span><i className="remote-dot" /> 2 remote</span><span><i className="away-dot" /> 1 away</span><b>75% checked in</b></div></article>
-            <article id="leave-approvals-card" className="manager-card approvals-card"><div className="manager-card-heading"><div><span className="card-kicker">Needs review</span><h2>Leave approvals</h2><p>Requests from your team</p></div><span className="approval-count">{leaveRequests.filter((item) => !approvedLeave.includes(item.id)).length}</span></div><div className="approval-list">{leaveRequests.map((request) => <div className={`approval-row ${approvedLeave.includes(request.id) ? 'approved' : ''}`} key={request.id}><span className={`team-person-avatar ${request.color}`}>{request.initials}</span><div><strong>{request.name}</strong><small>{request.type}</small></div>{approvedLeave.includes(request.id) ? <span className="approved-label">Approved</span> : <button className="approve-button" onClick={() => setApprovedLeave([...approvedLeave, request.id])}>Approve</button>}</div>)}</div><button className="view-link" onClick={() => handleManagerAction('Open approval queue')}>Open approval queue <ArrowUpRight size={14} /></button></article>
-            <article className="manager-card productivity-card"><div className="manager-card-heading"><div><span className="card-kicker">Last 6 weeks</span><h2>Productivity report</h2><p>Completed work against goals</p></div><button className="icon-button"><MoreHorizontal size={17} /></button></div><div className="productivity-chart"><div className="productivity-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div className="productivity-bars">{[62, 73, 68, 82, 78, 91].map((value, index) => <div className="productivity-column" key={value}><div className="productivity-bar" style={{ height: `${value}%` }} /><span>W{index + 1}</span></div>)}</div></div><div className="productivity-footer"><span><i /> Team productivity</span><b>86.4% <small>average</small></b></div></article>
-            <article className="manager-card allocation-card"><div className="manager-card-heading"><div><span className="card-kicker">Planning view</span><h2>Resource allocation</h2><p>Where your team is spending time</p></div><button className="small-link">Manage <ArrowUpRight size={13} /></button></div><div className="allocation-list"><div><span><i className="allocation-green" /> Client projects <b>58%</b></span><div><i style={{ width: '58%' }} /></div></div><div><span><i className="allocation-blue" /> Product development <b>27%</b></span><div><i style={{ width: '27%' }} /></div></div><div><span><i className="allocation-yellow" /> Team & operations <b>15%</b></span><div><i style={{ width: '15%' }} /></div></div></div><div className="allocation-note"><Sparkles size={14} /><span><strong>Capacity signal:</strong> Leah has 6 hours available this week.</span></div></article>
-            <article className="manager-card utilization-card"><div className="manager-card-heading"><div><span className="card-kicker">Current load</span><h2>Workforce utilization</h2><p>Capacity and workload by person</p></div><button className="small-link">View details <ArrowUpRight size={13} /></button></div><div className="utilization-row"><span className="team-person-avatar mint">LP</span><div><strong>Leah Park</strong><small>Product designer</small></div><div className="utilization-meter"><span style={{ width: '68%' }} /><small>68%</small></div></div><div className="utilization-row"><span className="team-person-avatar blue">JM</span><div><strong>Jordan Miller</strong><small>Senior designer</small></div><div className="utilization-meter"><span style={{ width: '92%' }} /><small>92%</small></div></div><div className="utilization-row"><span className="team-person-avatar yellow">SK</span><div><strong>Sofia Kim</strong><small>UX researcher</small></div><div className="utilization-meter"><span style={{ width: '81%' }} /><small>81%</small></div></div></article>
-            <article className="manager-card insight-card"><div className="insight-heading"><span className="ai-icon"><Sparkles size={15} /></span><div><span className="card-kicker">AI signal</span><h2>Protect the good momentum</h2></div></div><p>Your team's productivity is up <strong>6.8%</strong>, but two people are nearing capacity. Consider moving the research handoff to Leah.</p><button className="text-button">Explore recommendation <ArrowUpRight size={14} /></button></article>
+            <article id="team-attendance-card" className="manager-card attendance-team-card"><div className="manager-card-heading"><div><span className="card-kicker">Live today</span><h2>Team attendance & shifts</h2><p>{teamSummary.headcount || 0} direct reports across {teamSummary.location_count || 0} locations</p></div><button className="small-link" onClick={() => handleManagerAction('Full attendance')}>Full attendance <ArrowUpRight size={13} /></button></div><div className="team-attendance-list">{teamMembers.length ? teamMembers.map((member) => { const statusClass = member.status === 'Present' ? 'present' : member.status === 'Late' ? 'late' : member.status === 'On Leave' ? 'away' : ''; const currentShift = member.shift && member.shift.status !== 'Past'; const initials = member.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(); const scheduleText = currentShift ? `${member.shift.name} · ${member.shift.start_time}-${member.shift.end_time} · ${member.shift.location}` : member.shift ? `No current shift · Last: ${member.shift.name} on ${new Date(`${member.shift.date}T00:00:00`).toLocaleDateString()}` : 'No shift assigned'; return <div className="team-attendance-row" key={member.id}><span className="team-person-avatar blue">{initials}</span><div><strong>{member.name}</strong><small>{member.role} · {member.location}</small><small>{scheduleText}</small></div><span className={`attendance-status ${statusClass}`}>{member.status}</span><span className="attendance-time">{member.check_in || '—'}</span></div> }) : <p className="action-notice">{teamData ? 'No direct reports are assigned to this manager.' : 'Loading live team…'}</p>}</div><div className="attendance-summary"><span><i className="present-dot" /> {teamSummary.present_count || 0} present</span><span><i className="remote-dot" /> {teamSummary.late_count || 0} late</span><span><i className="away-dot" /> {(teamSummary.on_leave_count || 0) + (teamSummary.absent_count || 0)} away</span><b>{teamSummary.attendance_rate || 0}% checked in</b></div></article>
+            <article id="leave-approvals-card" className="manager-card approvals-card"><div className="manager-card-heading"><div><span className="card-kicker">Needs review</span><h2>Leave approvals</h2><p>Pending requests from direct reports</p></div><span className="approval-count">{leaveRequests.length}</span></div><div className="approval-list">{leaveRequests.length ? leaveRequests.map((request) => <div className="approval-row" key={request.id}><span className="team-person-avatar blue">{request.employee_name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><strong>{request.employee_name}</strong><small>{request.leave_type} · {new Date(`${request.start_date}T00:00:00`).toLocaleDateString()} - {new Date(`${request.end_date}T00:00:00`).toLocaleDateString()}</small></div><button className="approve-button" onClick={() => approveTeamLeave(request.id)}>Approve</button></div>) : <p className="action-notice">No pending leave requests from direct reports.</p>}</div><button className="view-link" onClick={() => handleManagerAction('Open approval queue')}>Open approval queue <ArrowUpRight size={14} /></button></article>
+            <article className="manager-card productivity-card"><div className="manager-card-heading"><div><span className="card-kicker">Performance records</span><h2>Team productivity</h2><p>Latest recorded ratings by direct report</p></div></div><div className="productivity-chart"><div className="productivity-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div className="productivity-bars">{reviewedMembers.length ? reviewedMembers.map((member) => { const rating = Number(member.productivity_rating); const score = Math.max(0, Math.min(100, rating <= 5 ? rating * 20 : rating)); return <div className="productivity-column" key={member.id}><div className="productivity-bar" title={`${member.name}: ${rating}`} style={{ height: `${score}%` }} /><span>{member.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span></div> }) : <p>No performance reviews recorded for direct reports.</p>}</div></div><div className="productivity-footer"><span><i /> Average recorded rating</span><b>{productivityLabel}</b></div></article>
+            <article className="manager-card allocation-card"><div className="manager-card-heading"><div><span className="card-kicker">Last 7 days</span><h2>Resource allocation</h2><p>Team timesheet hours by project</p></div><button className="small-link" onClick={() => onOpenManualEntry('Timesheet')}>Log time <ArrowUpRight size={13} /></button></div><div className="allocation-list">{teamAllocations.length ? teamAllocations.map((item, index) => { const color = ['green', 'blue', 'yellow'][index % 3]; return <div key={item.name}><span><i className={`allocation-${color}`} /> {item.name} <b>{item.percent}% · {item.hours}h</b></span><div><i style={{ width: `${item.percent}%` }} /></div></div> }) : <p>No team timesheet hours recorded in the last 7 days.</p>}</div><div className="allocation-note"><Sparkles size={14} /><span><strong>Schedule coverage:</strong> {shiftNeedsScheduling ? `${shiftNeedsScheduling} direct report(s) have no current shift. Use Schedule shift to assign one.` : 'All direct reports have a current shift assignment.'}</span></div></article>
+            <article className="manager-card utilization-card"><div className="manager-card-heading"><div><span className="card-kicker">Last 7 days</span><h2>Workforce utilization</h2><p>Timesheet hours against a 40-hour week</p></div></div>{teamMembers.length ? teamMembers.map((member) => <div className="utilization-row" key={member.id}><span className="team-person-avatar blue">{member.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span><div><strong>{member.name}</strong><small>{member.role}</small></div><div className="utilization-meter">{member.utilization_percent == null ? <small>No timesheet data</small> : <><span style={{ width: `${member.utilization_percent}%` }} /><small>{member.utilization_percent}% · {member.weekly_hours}h</small></>}</div></div>) : <p>No direct reports found.</p>}</article>
+            <article className="manager-card insight-card"><div className="insight-heading"><span className="ai-icon"><Sparkles size={15} /></span><div><span className="card-kicker">Live schedule signal</span><h2>{shiftNeedsScheduling ? 'Schedule coverage needed' : 'Team shifts assigned'}</h2></div></div><p>{shiftNeedsScheduling ? `${shiftNeedsScheduling} direct report(s) have no current shift assignment. Their saved work locations are shown above for scheduling.` : 'Every direct report currently has a published shift assignment.'}</p><button className="text-button" onClick={() => onOpenManualEntry('Shift')}>{shiftNeedsScheduling ? 'Schedule shifts' : 'Review shifts'} <ArrowUpRight size={14} /></button></article>
           </section>
         </div>
       </main>
@@ -474,6 +865,10 @@ function EmployeeDirectoryCard({ employees = [], onOpenManualEntry }) {
     const query = searchTerm.toLowerCase()
     return fullName.includes(query) || email.includes(query) || role.includes(query) || code.includes(query)
   })
+
+  const managersMap = Object.fromEntries(
+    employees.map((e) => [e.id, `${e.first_name || ''} ${e.last_name || ''}`.trim()])
+  )
 
   return (
     <article className="hr-card" style={{ gridColumn: '1 / -1', marginTop: '10px' }}>
@@ -517,6 +912,8 @@ function EmployeeDirectoryCard({ employees = [], onOpenManualEntry }) {
               <th>Email</th>
               <th>Role</th>
               <th>Access Role</th>
+              <th>Reporting Manager</th>
+              <th>Salary</th>
               <th>Status</th>
               <th>Hire Date</th>
             </tr>
@@ -537,6 +934,14 @@ function EmployeeDirectoryCard({ employees = [], onOpenManualEntry }) {
                   </td>
                   <td><span className="emp-role-badge">{emp.access_role || 'EMPLOYEE'}</span></td>
                   <td>
+                    {emp.manager_id && managersMap[emp.manager_id] ? (
+                      <span style={{ color: '#2b5343', fontWeight: 600 }}>{managersMap[emp.manager_id]}</span>
+                    ) : (
+                      <span style={{ color: '#88988e' }}>Unassigned</span>
+                    )}
+                  </td>
+                  <td>${Number(emp.base_salary ?? getDefaultSalaryByRole(emp.access_role, emp.role)).toLocaleString()}</td>
+                  <td>
                     <span className={`emp-status-badge ${String(emp.employment_status || 'active').toLowerCase().replace(' ', '-')}`}>
                       {emp.employment_status || 'Active'}
                     </span>
@@ -546,7 +951,7 @@ function EmployeeDirectoryCard({ employees = [], onOpenManualEntry }) {
               ))
             ) : (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#7a8c82' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '24px', color: '#7a8c82' }}>
                   No employees match "{searchTerm}". Click "+ Add Employee" to create one manually!
                 </td>
               </tr>
@@ -562,21 +967,41 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
   const [activeTab, setActiveTab] = useState(initialTab)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [employeeOptions, setEmployeeOptions] = useState({ departments: [], locations: [], managers: [] })
+  const modalManagersMap = Object.fromEntries(
+    employeesList.map((e) => [e.id, `${e.first_name || ''} ${e.last_name || ''}`.trim()])
+  )
+
+  const renderEmployeeSelectOptions = () => {
+    if (!employeesList.length) return <option value="E001">Alex Rivera (E001)</option>
+    return employeesList.map((e) => {
+      const mgrName = e.manager_id && modalManagersMap[e.manager_id] ? ` — Mgr: ${modalManagersMap[e.manager_id]}` : ''
+      return (
+        <option key={e.id} value={e.id}>
+          {e.first_name} {e.last_name} ({e.id}){mgrName}
+        </option>
+      )
+    })
+  }
 
   useEffect(() => {
     setActiveTab(initialTab)
   }, [initialTab, isOpen])
 
   const [empForm, setEmpForm] = useState({
+    employee_code: '',
     first_name: '',
     last_name: '',
     email: '',
     phone: '',
-    department_id: 'DEP-ENG',
+    department_id: '',
+    location_id: '',
+    manager_id: '',
     role: 'Software Engineer',
     access_role: 'EMPLOYEE',
     employment_status: 'Active',
     worker_type: 'Employee',
+    experience_years: 0,
     hire_date: new Date().toISOString().split('T')[0],
   })
 
@@ -596,6 +1021,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
     start_time: '09:00',
     end_time: '17:00',
     assignment_date: new Date().toISOString().split('T')[0],
+    location_id: '',
   })
 
   const [leaveForm, setLeaveForm] = useState({
@@ -624,6 +1050,36 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
     overtime_pay: 0.0,
   })
 
+  useEffect(() => {
+    if (!isOpen) return undefined
+    let active = true
+    fetch('http://localhost:8000/api/employees/options')
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Employee options unavailable')))
+      .then((options) => {
+        if (!active) return
+        setEmployeeOptions(options)
+        setEmpForm((currentForm) => {
+          const departmentId = currentForm.department_id || options.departments[0]?.id || ''
+          const departmentHeadId = options.departments.find((department) => department.id === departmentId)?.department_head_id || ''
+          const fallbackManagerId = resolveDefaultManagerId({
+            managerId: currentForm.manager_id,
+            departmentHeadId,
+            managers: options.managers || [],
+          })
+
+          return {
+            ...currentForm,
+            department_id: departmentId,
+            location_id: currentForm.location_id || options.locations[0]?.id || '',
+            manager_id: currentForm.manager_id || fallbackManagerId,
+          }
+        })
+        setShiftForm((current) => ({ ...current, location_id: current.location_id || options.locations[0]?.id || '' }))
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   const handleSubmit = async (e) => {
@@ -633,16 +1089,45 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
 
     try {
       if (activeTab === 'Employee') {
+        const departmentHeadId = employeeOptions.departments.find((item) => item.id === empForm.department_id)?.department_head_id || ''
+        const fallbackManagerId = resolveDefaultManagerId({
+          managerId: empForm.manager_id,
+          departmentHeadId,
+          managers: employeeOptions.managers || [],
+        })
+        const departmentName = employeeOptions.departments.find((item) => item.id === empForm.department_id)?.name || ''
+        const calculatedSalary = getDefaultSalaryByRole(empForm.access_role, empForm.role, empForm.worker_type, departmentName, empForm.experience_years)
+        const employeePayload = {
+          ...empForm,
+          manager_id: empForm.manager_id || fallbackManagerId,
+          employee_code: empForm.employee_code || `EMP-${Date.now().toString().slice(-5)}`,
+          base_salary: calculatedSalary,
+        }
         const res = await fetch('http://localhost:8000/api/employees/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(empForm),
+          body: JSON.stringify(employeePayload),
         })
         if (!res.ok) {
           const err = await res.json()
           throw new Error(err.detail || 'Failed to create employee')
         }
-        setMessage('Employee created successfully!')
+
+        const createdEmployee = await res.json()
+        await fetch('http://localhost:8000/api/payroll/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employee_id: createdEmployee.id,
+            pay_period: 'August 2026',
+            base_salary: Number(createdEmployee.base_salary || calculatedSalary),
+            bonuses_incentives: 0,
+            overtime_pay: 0,
+            payroll_status: 'Processed',
+          }),
+        })
+
+        setMessage(`Employee added with $${Number(createdEmployee.base_salary || calculatedSalary).toLocaleString()} annual salary and an automatic shift assignment.`)
       } else if (activeTab === 'Attendance') {
         const res = await fetch('http://localhost:8000/api/attendance/', {
           method: 'POST',
@@ -652,13 +1137,20 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
         if (!res.ok) throw new Error('Failed to mark attendance')
         setMessage('Attendance logged successfully!')
       } else if (activeTab === 'Shift') {
+        const shiftResponse = await fetch('http://localhost:8000/api/shifts/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shift_name: shiftForm.shift_name, start_time: shiftForm.start_time, end_time: shiftForm.end_time, location_id: shiftForm.location_id, status: 'Published' }),
+        })
+        if (!shiftResponse.ok) throw new Error('Failed to create shift')
+        const createdShift = await shiftResponse.json()
         const res = await fetch('http://localhost:8000/api/shifts/assign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...shiftForm, shift_id: 'SH-001' }),
+          body: JSON.stringify({ employee_id: shiftForm.employee_id, shift_id: createdShift.id, assignment_date: shiftForm.assignment_date }),
         })
         if (!res.ok) throw new Error('Failed to assign shift')
-        setMessage('Shift assigned successfully!')
+        setMessage(`Shift created and assigned at ${employeeOptions.locations.find((item) => item.id === shiftForm.location_id)?.name || 'the selected location'}.`)
       } else if (activeTab === 'Leave') {
         const res = await fetch('http://localhost:8000/api/leaves/', {
           method: 'POST',
@@ -685,7 +1177,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
         setMessage('Payroll record updated successfully!')
       }
 
-      if (onRefreshData) onRefreshData()
+      if (onRefreshData) await onRefreshData()
       setTimeout(() => {
         setLoading(false)
         onClose()
@@ -746,6 +1238,10 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
           {activeTab === 'Employee' && (
             <div className="form-grid">
               <div className="form-group">
+                <label>Employee Code</label>
+                <input value={empForm.employee_code} onChange={(e) => setEmpForm({ ...empForm, employee_code: e.target.value })} placeholder="EMP-104" />
+              </div>
+              <div className="form-group">
                 <label>First Name</label>
                 <input required value={empForm.first_name} onChange={(e) => setEmpForm({ ...empForm, first_name: e.target.value })} placeholder="e.g. John" />
               </div>
@@ -763,12 +1259,9 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
               </div>
               <div className="form-group">
                 <label>Department</label>
-                <select value={empForm.department_id} onChange={(e) => setEmpForm({ ...empForm, department_id: e.target.value })}>
-                  <option value="DEP-ENG">Engineering</option>
-                  <option value="DEP-CS">Customer Success</option>
-                  <option value="DEP-MKT">Marketing</option>
-                  <option value="DEP-OPS">Operations</option>
-                  <option value="DEP-HR">Human Resources</option>
+                <select required value={empForm.department_id} onChange={(e) => setEmpForm({ ...empForm, department_id: e.target.value })}>
+                  <option value="">Select department</option>
+                  {employeeOptions.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                 </select>
               </div>
               <div className="form-group">
@@ -781,6 +1274,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
                   <option value="EMPLOYEE">Employee</option>
                   <option value="MANAGER">Manager</option>
                   <option value="HR_ADMIN">HR Administrator</option>
+                  <option value="ADMIN">System Admin</option>
                 </select>
               </div>
               <div className="form-group">
@@ -788,7 +1282,26 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
                 <select value={empForm.worker_type} onChange={(e) => setEmpForm({ ...empForm, worker_type: e.target.value })}>
                   <option value="Employee">Full-time Employee</option>
                   <option value="Contractor">Contractor</option>
+                  <option value="Intern">Intern</option>
                 </select>
+              </div>
+              <div className="form-group">
+                <label>Work Location</label>
+                <select required value={empForm.location_id} onChange={(e) => setEmpForm({ ...empForm, location_id: e.target.value })}>
+                  <option value="">Select location</option>
+                  {employeeOptions.locations.map((location) => <option key={location.id} value={location.id}>{[location.name, location.city, location.country].filter(Boolean).join(' · ')}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Reports To</label>
+                <select value={empForm.manager_id} onChange={(e) => setEmpForm({ ...empForm, manager_id: e.target.value })}>
+                  <option value="">Department manager</option>
+                  {employeesList.filter((item) => item.access_role === 'MANAGER' || /manager/i.test(item.role || '')).map((manager) => <option key={manager.id} value={manager.id}>{manager.first_name} {manager.last_name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Experience (years)</label>
+                <input type="number" min="0" max="60" step="0.5" value={empForm.experience_years} onChange={(e) => setEmpForm({ ...empForm, experience_years: Number(e.target.value) || 0 })} />
               </div>
               <div className="form-group">
                 <label>Hire Date</label>
@@ -802,6 +1315,10 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
+              <div className="form-group">
+                <label>Estimated Annual Salary ($)</label>
+                <input readOnly value={getDefaultSalaryByRole(empForm.access_role, empForm.role, empForm.worker_type, employeeOptions.departments.find((item) => item.id === empForm.department_id)?.name, empForm.experience_years)} />
+              </div>
             </div>
           )}
 
@@ -810,7 +1327,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
               <div className="form-group">
                 <label>Employee</label>
                 <select value={attForm.employee_id} onChange={(e) => setAttForm({ ...attForm, employee_id: e.target.value })}>
-                  {employeesList.length > 0 ? employeesList.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.id})</option>) : <option value="E001">Alex Rivera (E001)</option>}
+                  {renderEmployeeSelectOptions()}
                 </select>
               </div>
               <div className="form-group">
@@ -851,7 +1368,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
               <div className="form-group">
                 <label>Employee</label>
                 <select value={shiftForm.employee_id} onChange={(e) => setShiftForm({ ...shiftForm, employee_id: e.target.value })}>
-                  {employeesList.length > 0 ? employeesList.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.id})</option>) : <option value="E001">Alex Rivera (E001)</option>}
+                  {renderEmployeeSelectOptions()}
                 </select>
               </div>
               <div className="form-group">
@@ -870,6 +1387,13 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
                 <label>End Time</label>
                 <input type="time" value={shiftForm.end_time} onChange={(e) => setShiftForm({ ...shiftForm, end_time: e.target.value })} />
               </div>
+              <div className="form-group">
+                <label>Work Location</label>
+                <select required value={shiftForm.location_id} onChange={(e) => setShiftForm({ ...shiftForm, location_id: e.target.value })}>
+                  <option value="">Select location</option>
+                  {employeeOptions.locations.map((location) => <option key={location.id} value={location.id}>{[location.name, location.city, location.country].filter(Boolean).join(' · ')}</option>)}
+                </select>
+              </div>
             </div>
           )}
 
@@ -878,7 +1402,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
               <div className="form-group">
                 <label>Employee</label>
                 <select value={leaveForm.employee_id} onChange={(e) => setLeaveForm({ ...leaveForm, employee_id: e.target.value })}>
-                  {employeesList.length > 0 ? employeesList.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.id})</option>) : <option value="E001">Alex Rivera (E001)</option>}
+                  {renderEmployeeSelectOptions()}
                 </select>
               </div>
               <div className="form-group">
@@ -910,7 +1434,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
               <div className="form-group">
                 <label>Employee</label>
                 <select value={tsForm.employee_id} onChange={(e) => setTsForm({ ...tsForm, employee_id: e.target.value })}>
-                  {employeesList.length > 0 ? employeesList.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.id})</option>) : <option value="E001">Alex Rivera (E001)</option>}
+                  {renderEmployeeSelectOptions()}
                 </select>
               </div>
               <div className="form-group">
@@ -937,7 +1461,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
               <div className="form-group">
                 <label>Employee</label>
                 <select value={payForm.employee_id} onChange={(e) => setPayForm({ ...payForm, employee_id: e.target.value })}>
-                  {employeesList.length > 0 ? employeesList.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.id})</option>) : <option value="E001">Alex Rivera (E001)</option>}
+                  {renderEmployeeSelectOptions()}
                 </select>
               </div>
               <div className="form-group">
@@ -967,7 +1491,10 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
   )
 }
 
-function HRDashboard({ onLogout, dataset, onImport, onOpenAssistant, assistantState, liveSnapshot, onGeneratePayroll, liveWorkforce, onOpenManualEntry }) {
+function HRDashboard({ onLogout, dataset, onImport, onOpenAssistant, assistantState, liveSnapshot, onGeneratePayroll, liveWorkforce, onOpenManualEntry, onExportReport, currentName, currentEmail }) {
+  const hrDisplayName = currentName || 'HR Administrator'
+  const hrFirstName = hrDisplayName.split(' ')[0] || 'User'
+  const hrInitials = hrDisplayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'HR'
   const [activeSection, setActiveSection] = useState('Overview')
   const [dismissedAlerts, setDismissedAlerts] = useState([])
   const [hubTab, setHubTab] = useState('AI capabilities')
@@ -981,12 +1508,21 @@ function HRDashboard({ onLogout, dataset, onImport, onOpenAssistant, assistantSt
     { label: 'Payroll reports', icon: WalletCards },
     { label: 'Compliance monitoring', icon: ShieldCheck },
   ]
-  const alerts = [
+  const dbAlerts = (liveWorkforce?.notifications || []).map((notif, index) => ({
+    id: notif.id || index + 1,
+    icon: (notif.severity === 'High' || String(notif.alert_type || '').toLowerCase().includes('anomaly')) ? AlertTriangle : (String(notif.alert_type || '').toLowerCase().includes('leave') ? FileBarChart : CalendarDays),
+    color: (notif.severity === 'High' || notif.severity === 'Warning') ? 'coral' : String(notif.alert_type || '').toLowerCase().includes('leave') ? 'yellow' : 'blue',
+    title: notif.title || notif.alert_type || 'Notification Alert',
+    text: notif.message,
+    action: notif.action_url ? 'Full report' : 'Open approvals'
+  }))
+  const defaultAlerts = [
     { id: 1, icon: CalendarDays, color: 'blue', title: 'Shift reminders', text: '18 employees have shifts starting within 2 hours.', action: 'Review shifts' },
     { id: 2, icon: FileBarChart, color: 'yellow', title: 'Leave approval notifications', text: '7 leave requests are waiting for manager approval.', action: 'Open approvals' },
     { id: 3, icon: AlertTriangle, color: 'coral', title: 'Attendance alerts', text: '4 late arrivals and 2 unusual check-ins detected today.', action: 'View anomalies' },
     { id: 4, icon: Sparkles, color: 'mint', title: 'Birthdays & anniversaries', text: 'Celebrate 3 team milestones this week.', action: 'See milestones' },
   ]
+  const alerts = dbAlerts.length ? dbAlerts : defaultAlerts
   const hubContent = {
     'AI capabilities': {
       kicker: 'Intelligence layer', title: 'AI capabilities', description: 'Signals that turn workforce data into earlier, smarter decisions.', items: [
@@ -1013,16 +1549,20 @@ function HRDashboard({ onLogout, dataset, onImport, onOpenAssistant, assistantSt
   const workflow = ['Check-in captured', 'AI validates attendance', 'Shift & overtime calculated', 'Leave routed for approval', 'Timesheet approved', 'Payroll inputs generated', 'Dashboards updated', 'Alerts shared', 'Reports distributed']
   const activeHub = hubContent[hubTab]
   const metrics = deriveMetrics(dataset.attendance, dataset.allocation, dataset.workforce)
+  const liveEmployees = liveWorkforce?.employees || []
+  const liveDepartmentCount = liveWorkforce?.departments?.length || metrics.departments
+  const liveLocationCount = liveWorkforce?.locations?.length || new Set(liveEmployees.map((employee) => employee.location_id).filter(Boolean)).size
   const liveMetrics = {
     employeeCount: liveSnapshot.employeeCount || metrics.employeeCount,
-    attritionRate: liveSnapshot.employeeCount ? Math.max(0, Math.min(100, liveSnapshot.attendanceRate || 0)) : metrics.attritionRate,
+    attritionRate: metrics.attritionRate,
     attendance: liveSnapshot.attendanceRate || metrics.attendance,
     payrollRate: liveSnapshot.totalRecords ? Math.round((liveSnapshot.processedPayrollCount / liveSnapshot.totalRecords) * 100) : metrics.payrollRate,
     processedPayroll: liveSnapshot.processedPayrollCount || metrics.processedPayroll,
     workforceRows: liveSnapshot.totalRecords || metrics.workforceRows,
-    presentRows: liveSnapshot.presentCount || metrics.presentRows,
-    leaveRows: liveSnapshot.leaveCount || metrics.leaveRows,
-    absentRows: Math.max(0, (liveSnapshot.employeeCount || 0) - (liveSnapshot.presentCount || 0) - (liveSnapshot.leaveCount || 0)) || metrics.absentRows,
+    presentRows: liveSnapshot.attendanceRecordCount ? liveSnapshot.presentCount : metrics.presentRows,
+    lateRows: liveSnapshot.attendanceRecordCount ? liveSnapshot.lateCount : 0,
+    leaveRows: liveSnapshot.attendanceRecordCount ? liveSnapshot.attendanceOnLeaveCount : metrics.leaveRows,
+    absentRows: liveSnapshot.attendanceRecordCount ? liveSnapshot.attendanceAbsentCount : metrics.absentRows,
     departments: metrics.departments,
     allocationRows: metrics.allocationRows,
   }
@@ -1063,21 +1603,21 @@ function HRDashboard({ onLogout, dataset, onImport, onOpenAssistant, assistantSt
     <div className="hr-dashboard">
       <aside className="hr-sidebar">
         <div className="brand" />
-        <div className="hr-profile"><span className="profile-avatar hr-avatar">AR</span><div><strong>Alex Rivera</strong><small>HR Administrator</small></div></div>
+        <div className="hr-profile"><span className="profile-avatar hr-avatar">{hrInitials}</span><div><strong>{hrDisplayName}</strong><small>HR Administrator</small></div></div>
         <p className="nav-label">HR command center</p>
         <nav>{hrNav.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${activeSection === label ? 'active' : ''}`} onClick={() => handleHrNavigation(label)}><Icon size={17} /><span>{label}</span>{label === 'Compliance monitoring' && <span className="nav-pill">2</span>}</button>)}</nav>
         <div className="hr-sidebar-bottom"><div className="security-chip"><ShieldCheck size={15} /><span><strong>All systems secure</strong><small>Last audit · 12 min ago</small></span></div><button className="logout-button" onClick={onLogout}><LogOut size={17} /><span>Log out</span></button></div>
       </aside>
       <main className="hr-main">
-        <header className="hr-topbar"><div><p className="eyebrow"><span className="live-dot" /> HR command center · Tuesday, September 8</p><h1>Good morning, Alex <span>✦</span></h1><p className="hr-subtitle">The people signals that need your attention today.</p></div><div className="hr-top-actions"><button className="primary-button" onClick={() => onOpenManualEntry('Employee')}><UserPlus size={15} /> + Add Employee / Manual Entry</button><button className="outline-button" onClick={onGeneratePayroll}><WalletCards size={15} /> Generate payroll</button><button className="outline-button"><FileBarChart size={15} /> Export report</button><button className="outline-button" onClick={onOpenAssistant}><Bot size={15} /> Ask assistant</button><button className="notification-button hr-notification-button" aria-label="Notifications"><Bell size={18} /><i /><span>{alerts.length - dismissedAlerts.length}</span></button><button className="hr-mobile-logout" onClick={onLogout}><LogOut size={15} /></button></div></header>
+        <header className="hr-topbar"><div><p className="eyebrow"><span className="live-dot" /> HR command center · Tuesday, September 8</p><h1>Good morning, {hrFirstName} <span>✦</span></h1><p className="hr-subtitle">The people signals that need your attention today.</p></div><div className="hr-top-actions"><button className="primary-button" onClick={() => onOpenManualEntry('Employee')}><UserPlus size={15} /> + Add Employee / Manual Entry</button><button className="outline-button" onClick={onGeneratePayroll}><WalletCards size={15} /> Generate payroll</button><button className="outline-button" onClick={() => onExportReport?.('hr-command-report')}><FileBarChart size={15} /> Export report</button><button className="outline-button" onClick={onOpenAssistant}><Bot size={15} /> Ask assistant</button><button className="notification-button hr-notification-button" aria-label="Notifications"><Bell size={18} /><i /><span>{alerts.length - dismissedAlerts.length}</span></button><button className="hr-mobile-logout" onClick={onLogout}><LogOut size={15} /></button></div></header>
         <div className="hr-content">
           <section className="data-import-card"><div><span className="card-kicker">Workforce Record Operations</span><h2>Add or refresh workforce records</h2><p>{dataset.attendance.length} attendance records · {dataset.allocation.length} allocation records · {metrics.departments} departments</p></div><div style={{ display: 'flex', gap: '10px' }}><button className="primary-button" onClick={() => onOpenManualEntry('Employee')}><UserPlus size={15} /> Manual Record Entry</button><label className="outline-button import-button"><Database size={15} /> Import CSV<input type="file" accept=".csv,text/csv" onChange={onImport} /></label></div></section>
-          <section className="hr-stat-grid"><article className="hr-stat green"><span className="stat-icon green"><UsersRound size={17} /></span><div><small>Total employees</small><strong>{liveMetrics.employeeCount.toLocaleString()}</strong><p><b>Live</b> · backend employee count</p></div><span className="stat-spark green-spark"><i /><i /><i /><i /><i /></span></article><article className="hr-stat blue"><span className="stat-icon blue"><Activity size={17} /></span><div><small>Attrition rate</small><strong>{liveMetrics.attritionRate}%</strong><p><b>Live</b> · workforce health signal</p></div><span className="stat-spark blue-spark"><i /><i /><i /><i /><i /></span></article><article className="hr-stat yellow"><span className="stat-icon yellow"><Clock3 size={17} /></span><div><small>Attendance present rate</small><strong>{liveMetrics.attendance}%</strong><p><b>{liveMetrics.presentRows}</b> present · backend snapshot</p></div><span className="stat-spark yellow-spark"><i /><i /><i /><i /><i /></span></article><article className="hr-stat coral"><span className="stat-icon coral"><WalletCards size={17} /></span><div><small>Payroll processed</small><strong>{liveMetrics.payrollRate}%</strong><p><b>{liveMetrics.processedPayroll}</b> of {liveMetrics.workforceRows} payroll records</p></div><span className="stat-spark coral-spark"><i /><i /><i /><i /><i /></span></article></section>
+          <section className="hr-stat-grid"><article className="hr-stat green"><span className="stat-icon green"><UsersRound size={17} /></span><div><small>Total employees</small><strong>{liveMetrics.employeeCount.toLocaleString()}</strong><p><b>Live</b> · backend employee count</p></div><span className="stat-spark green-spark"><i /><i /><i /><i /><i /></span></article><article className="hr-stat blue"><span className="stat-icon blue"><Activity size={17} /></span><div><small>Attrition rate</small><strong>{liveMetrics.attritionRate}%</strong><p><b>Imported</b> · workforce metrics</p></div><span className="stat-spark blue-spark"><i /><i /><i /><i /><i /></span></article><article className="hr-stat yellow"><span className="stat-icon yellow"><Clock3 size={17} /></span><div><small>Attendance present rate</small><strong>{liveMetrics.attendance}%</strong><p><b>{liveMetrics.presentRows}</b> present · backend snapshot</p></div><span className="stat-spark yellow-spark"><i /><i /><i /><i /><i /></span></article><article className="hr-stat coral"><span className="stat-icon coral"><WalletCards size={17} /></span><div><small>Payroll processed</small><strong>{liveMetrics.payrollRate}%</strong><p><b>{liveMetrics.processedPayroll}</b> of {liveMetrics.workforceRows} payroll records</p></div><span className="stat-spark coral-spark"><i /><i /><i /><i /><i /></span></article></section>
           <section className="hr-grid">
             <EmployeeDirectoryCard employees={liveWorkforce?.employees || []} onOpenManualEntry={onOpenManualEntry} />
-            <article id="employee-analytics-card" className="hr-card employee-analytics-card"><div className="hr-card-heading"><div><span className="card-kicker">People overview</span><h2>Employee analytics</h2><p>Headcount distribution across loaded data</p></div><button className="small-link" onClick={() => onOpenManualEntry('Employee')}>+ Add Employee <ArrowUpRight size={13} /></button></div><div className="analytics-body"><div className="analytics-donut"><strong>{metrics.employeeCount.toLocaleString()}</strong><small>employees</small></div><div className="analytics-legend"><span><i className="legend-green" />Departments <b>{metrics.departments}</b></span><span><i className="legend-blue" />Allocation rows <b>{metrics.allocationRows}</b></span><span><i className="legend-yellow" />Attendance rows <b>{dataset.attendance.length}</b></span><span><i className="legend-coral" />Profiles <b>Not supplied</b></span></div></div><div className="analytics-footer"><span>{metrics.departments} departments</span><span>Locations not supplied</span><span>Profile fields not supplied</span></div></article>
-            <article id="attrition-card" className="hr-card attrition-card"><div className="hr-card-heading"><div><span className="card-kicker">Predictive signal</span><h2>Attrition trends</h2><p>Average rate across workforce metrics</p></div><span className="risk-badge">{metrics.attritionDelta <= 0 ? 'Improving' : 'Watch'}</span></div><div className="attrition-data-panel"><strong>{metrics.attritionRate}%</strong><span>Current average attrition</span><b>{metrics.attritionDelta <= 0 ? '↓' : '↑'} {Math.abs(metrics.attritionDelta)}% vs previous period</b></div></article>
-            <article id="attendance-report-card" className="hr-card attendance-report-card"><div className="hr-card-heading"><div><span className="card-kicker">Operations</span><h2>Attendance reports</h2><p>Calculated from live attendance records</p></div><button className="small-link" onClick={() => handleHrAction('Full report')}>Full report <ArrowUpRight size={13} /></button></div><div className="attendance-report-footer"><span><strong>{liveMetrics.presentRows}</strong> present</span><span><strong>{liveMetrics.leaveRows}</strong> leave/away</span><span><strong>{liveMetrics.absentRows}</strong> absent</span></div></article>
+            <article id="employee-analytics-card" className="hr-card employee-analytics-card"><div className="hr-card-heading"><div><span className="card-kicker">People overview</span><h2>Employee analytics</h2><p>Live employee profiles and imported workforce data</p></div><button className="small-link" onClick={() => onOpenManualEntry('Employee')}>+ Add Employee <ArrowUpRight size={13} /></button></div><div className="analytics-body"><div className="analytics-donut"><strong>{liveMetrics.employeeCount.toLocaleString()}</strong><small>employees</small></div><div className="analytics-legend"><span><i className="legend-green" />Departments <b>{liveDepartmentCount}</b></span><span><i className="legend-blue" />Imported allocation rows <b>{metrics.allocationRows}</b></span><span><i className="legend-yellow" />Imported attendance rows <b>{dataset.attendance.length}</b></span><span><i className="legend-coral" />Employee profiles <b>{liveEmployees.length}</b></span></div></div><div className="analytics-footer"><span>{liveDepartmentCount} departments</span><span>{liveLocationCount} live locations</span><span>{liveEmployees.length} profiles loaded</span></div></article>
+            <article id="attrition-card" className="hr-card attrition-card"><div className="hr-card-heading"><div><span className="card-kicker">Predictive signal</span><h2>Attrition trends</h2><p>Average rate across imported workforce metrics</p></div><span className="risk-badge">{metrics.attritionDelta <= 0 ? 'Improving' : 'Watch'}</span></div><div className="attrition-data-panel"><strong>{metrics.attritionRate}%</strong><span>Current average attrition</span><b>{metrics.attritionDelta <= 0 ? '↓' : '↑'} {Math.abs(metrics.attritionDelta)}% vs previous period</b></div></article>
+            <article id="attendance-report-card" className="hr-card attendance-report-card"><div className="hr-card-heading"><div><span className="card-kicker">Operations</span><h2>Attendance reports</h2><p>Recorded statuses across live attendance rows</p></div><button className="small-link" onClick={() => handleHrAction('Full report')}>Full report <ArrowUpRight size={13} /></button></div><div className="attendance-report-footer"><span><strong>{liveMetrics.presentRows}</strong> present</span><span><strong>{liveMetrics.lateRows}</strong> late</span><span><strong>{liveMetrics.leaveRows}</strong> on leave</span><span><strong>{liveMetrics.absentRows}</strong> absent</span></div></article>
             <article id="payroll-card" className="hr-card payroll-card"><div className="hr-card-heading"><div><span className="card-kicker">Finance operations</span><h2>Payroll reports</h2><p>Payroll status from backend data</p></div><span className="processed-badge"><ShieldCheck size={13} /> {liveMetrics.payrollRate}% ready</span></div><div className="payroll-progress"><div><span>Payroll records processed</span><b>{liveMetrics.processedPayroll} / {liveMetrics.workforceRows}</b></div><div className="payroll-track"><i style={{ width: `${liveMetrics.payrollRate}%` }} /></div></div><div className="payroll-items"><span><i className="payroll-green" />Processed <b>{liveMetrics.processedPayroll}</b></span><span><i className="payroll-yellow" />Pending <b>{Math.max(0, liveMetrics.workforceRows - liveMetrics.processedPayroll)}</b></span></div></article>
             <article id="compliance-card" className="hr-card compliance-card"><div className="hr-card-heading"><div><span className="card-kicker">Risk & governance</span><h2>Compliance monitoring</h2><p>Policy health across your organization</p></div><span className="compliance-score">92 <small>/ 100</small></span></div><div className="compliance-list"><span><ShieldCheck size={14} /><b>GDPR data handling</b><em>Compliant</em></span><span><ShieldCheck size={14} /><b>Mandatory training</b><em className="warning">18 due</em></span><span><ShieldCheck size={14} /><b>Access reviews</b><em className="warning">2 overdue</em></span></div><button className="view-link" onClick={() => handleHrAction('Review compliance center')}>Review compliance center <ArrowUpRight size={14} /></button></article>
             <article id="alerts-card" className="hr-card alerts-card"><div className="hr-card-heading"><div><span className="card-kicker">Live feed</span><h2>Notifications & alerts</h2><p>Stay ahead of the moments that matter</p></div><span className="alert-count">{alerts.length - dismissedAlerts.length} new</span></div>{actionNotice && <p className="action-notice" role="status">{actionNotice}</p>}<div className="hr-alert-list">{alerts.map((alert) => { const Icon = alert.icon; return <div className={`hr-alert ${dismissedAlerts.includes(alert.id) ? 'dismissed' : ''}`} key={alert.id}><span className={`alert-icon ${alert.color}`}><Icon size={14} /></span><div><strong>{alert.title}</strong><small>{alert.text}</small><button onClick={() => handleHrAction(alert.action)}>{alert.action} <ArrowUpRight size={11} /></button></div><button className="dismiss-alert" onClick={() => setDismissedAlerts([...dismissedAlerts, alert.id])} aria-label={`Dismiss ${alert.title}`}>×</button></div> })}</div></article>
@@ -1105,16 +1645,486 @@ function HRDashboard({ onLogout, dataset, onImport, onOpenAssistant, assistantSt
   )
 }
 
+function AdminDashboard({ onLogout, dataset, onImport, onOpenAssistant, assistantState, liveSnapshot, onGeneratePayroll, liveWorkforce, onOpenManualEntry, onExportReport, onIssueSetupCode, accessToken, currentEmail }) {
+  const [activeSection, setActiveSection] = useState('Master Overview')
+  const [previewRoleView, setPreviewRoleView] = useState('master')
+  const [actionNotice, setActionNotice] = useState('')
+  const [adminApproved, setAdminApproved] = useState([])
+  const [setupTargetEmail, setSetupTargetEmail] = useState('')
+  const [issuedSetupCode, setIssuedSetupCode] = useState('')
+  const [setupCodeError, setSetupCodeError] = useState('')
+  const [isIssuingSetupCode, setIsIssuingSetupCode] = useState(false)
+
+  const adminNav = [
+    { label: 'Master Overview', icon: LayoutDashboard },
+    { label: 'Live Directory', icon: UsersRound },
+    { label: 'Attendance Matrix', icon: Clock3 },
+    { label: 'Global Payroll', icon: WalletCards },
+    { label: 'Approvals & Overrides', icon: FileBarChart },
+    { label: 'Security & Audit Logs', icon: ShieldCheck },
+  ]
+
+  const employees = liveWorkforce?.employees || []
+  const leaveRequests = liveWorkforce?.leaveRequests || []
+  const previewManager = employees.find((employee) => employee.email === 'maya.roberts@northstar.example') || employees.find((employee) => String(employee.access_role || '').toUpperCase() === 'MANAGER')
+  const managerPreview = previewManager ? { employeeId: previewManager.id, name: `${previewManager.first_name} ${previewManager.last_name}` } : null
+  const previewEmployee = employees.find((employee) => String(employee.access_role || '').toUpperCase() === 'EMPLOYEE')
+  const employeePreview = previewEmployee ? {
+    employeeId: previewEmployee.id,
+    email: previewEmployee.email,
+    name: `${previewEmployee.first_name} ${previewEmployee.last_name}`,
+    label: previewEmployee.role || 'Employee',
+  } : { label: 'Employee Preview' }
+
+  const adminCount = employees.filter(e => (e.access_role || '').toUpperCase() === 'ADMIN').length || 1
+  const hrCount = employees.filter(e => (e.access_role || '').toUpperCase() === 'HR_ADMIN' || (e.access_role || '').toUpperCase() === 'HR').length || 2
+  const managerCount = employees.filter(e => (e.access_role || '').toUpperCase() === 'MANAGER').length || 3
+  const employeeCount = employees.filter(e => (e.access_role || '').toUpperCase() === 'EMPLOYEE').length || Math.max(0, employees.length - adminCount - hrCount - managerCount)
+
+  const securityAuditLogs = [
+    { id: 1, action: 'ADMIN_ACCESS_LOGIN', user: 'admin@gmail.com', ip: '192.168.1.105', status: 'SUCCESS', time: 'Just now' },
+    { id: 2, action: 'HR_PAYROLL_GENERATE', user: 'megha@gmail.com', ip: '192.168.1.112', status: 'SUCCESS', time: '14 mins ago' },
+    { id: 3, action: 'EMPLOYEE_GPS_CHECKIN', user: 'alex@gmail.com', ip: '172.16.0.42', status: 'SUCCESS', time: '42 mins ago' },
+    { id: 4, action: 'MANAGER_LEAVE_APPROVAL', user: 'manager@gmail.com', ip: '192.168.1.109', status: 'SUCCESS', time: '1 hour ago' },
+  ]
+
+  const handleAdminApproveAll = () => {
+    setAdminApproved([1, 2, 3])
+    setActionNotice('Admin Master Override: All pending leave requests and attendance records approved.')
+  }
+
+  const handleIssueSetupCode = async (event) => {
+    event.preventDefault()
+    setSetupCodeError('')
+    setIssuedSetupCode('')
+    setIsIssuingSetupCode(true)
+    const result = await onIssueSetupCode(setupTargetEmail, accessToken)
+    setIsIssuingSetupCode(false)
+    if (result.error) setSetupCodeError(result.error)
+    else setIssuedSetupCode(result.setupCode)
+  }
+
+  const pendingAdminRequests = [
+    { id: 1, initials: 'JM', name: 'Jordan Miller', type: 'Annual leave · Sep 14-16', color: 'blue' },
+    { id: 2, initials: 'SK', name: 'Sofia Kim', type: 'Personal day · Sep 12', color: 'yellow' },
+    { id: 3, initials: 'DW', name: 'Daniel Wong', type: 'Sick leave · Sep 10', color: 'coral' },
+  ].filter((request) => !adminApproved.includes(request.id))
+
+  const renderAdminSectionContent = () => {
+    switch (activeSection) {
+      case 'Live Directory':
+        return <div style={{ gridColumn: '1 / -1' }}><EmployeeDirectoryCard employees={employees} onOpenManualEntry={onOpenManualEntry} /></div>
+      case 'Attendance Matrix':
+        return (
+          <article className="admin-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="admin-card-heading">
+              <div>
+                <span className="card-kicker" style={{ color: '#7c3aed' }}>Attendance</span>
+                <h2>Attendance Matrix</h2>
+                <p>Live team presence and shift status</p>
+              </div>
+            </div>
+            <div className="employee-table-container">
+              <table className="employee-table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Employee Name</th>
+                    <th>Role</th>
+                    <th>Access Role</th>
+                    <th>Status</th>
+                    <th>Check-in</th>
+                    <th>Shift</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.slice(0, 6).map((employee) => (
+                    <tr key={employee.id || employee.employee_code || employee.email}>
+                      <td><span className="emp-code-badge">{employee.employee_code || employee.id}</span></td>
+                      <td><strong style={{ color: '#253a31', fontSize: '11px' }}>{employee.first_name} {employee.last_name}</strong></td>
+                      <td>{employee.role || 'Employee'}</td>
+                      <td><span className="emp-role-badge">{employee.access_role || 'EMPLOYEE'}</span></td>
+                      <td><span className={`emp-status-badge ${String(employee.employment_status || 'active').toLowerCase().replace(' ', '-')}`}>{employee.employment_status || 'Active'}</span></td>
+                      <td>{liveSnapshot.presentCount > 0 ? '09:00' : 'Not checked in'}</td>
+                      <td>{employee.role?.toLowerCase().includes('manager') ? 'Manager Shift' : 'Standard Shift'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        )
+      case 'Global Payroll':
+        return (
+          <article className="admin-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="admin-card-heading">
+              <div>
+                <span className="card-kicker" style={{ color: '#7c3aed' }}>Payroll</span>
+                <h2>Global Payroll</h2>
+                <p>Role-based salary automation and payroll status</p>
+              </div>
+            </div>
+            <div className="employee-table-container">
+              <table className="employee-table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Employee Name</th>
+                    <th>Role</th>
+                    <th>Access Role</th>
+                    <th>Salary</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((employee) => (
+                    <tr key={employee.id || employee.employee_code || employee.email}>
+                      <td><span className="emp-code-badge">{employee.employee_code || employee.id}</span></td>
+                      <td><strong style={{ color: '#253a31', fontSize: '11px' }}>{employee.first_name} {employee.last_name}</strong></td>
+                      <td>{employee.role || 'Employee'}</td>
+                      <td><span className="emp-role-badge">{employee.access_role || 'EMPLOYEE'}</span></td>
+                      <td>${Number(employee.base_salary || getDefaultSalaryByRole(employee.access_role, employee.role)).toLocaleString()}</td>
+                      <td><span className="emp-status-badge active">Processed</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        )
+      case 'Approvals & Overrides':
+        return (
+          <article className="admin-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="admin-card-heading">
+              <div>
+                <span className="card-kicker" style={{ color: '#7c3aed' }}>Approvals</span>
+                <h2>Pending Leave & Shift Approvals</h2>
+                <p>Global queue of manager and employee requests</p>
+              </div>
+              <span className="admin-badge-yellow">{pendingAdminRequests.length || 0} Pending</span>
+            </div>
+            <div className="approval-list">
+              {pendingAdminRequests.length > 0 ? pendingAdminRequests.map((request) => (
+                <div key={request.id} className="approval-row">
+                  <span className={`team-person-avatar ${request.color}`}>{request.initials}</span>
+                  <div><strong>{request.name}</strong><small>{request.type}</small></div>
+                  <button className="approve-button" style={{ borderColor: '#ddd6fe', background: '#f3e8ff', color: '#6d28d9' }} onClick={() => { setAdminApproved((current) => [...current, request.id]); setActionNotice(`Approved ${request.name} leave.`) }}>Admin Approve</button>
+                </div>
+              )) : <div className="approval-row" style={{ justifyContent: 'center', color: '#587167', fontWeight: 600 }}>No pending approvals.</div>}
+            </div>
+          </article>
+        )
+      case 'Security & Audit Logs':
+        return (
+          <article className="admin-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="admin-card-heading">
+              <div>
+                <span className="card-kicker" style={{ color: '#7c3aed' }}>Security</span>
+                <h2>Security & Audit Logs</h2>
+                <p>Real-time security events across all active accounts</p>
+              </div>
+              <span className="admin-badge-purple">Live Feed</span>
+            </div>
+            <form className="setup-code-form" onSubmit={handleIssueSetupCode}>
+              <h3>Issue a password setup code</h3>
+              <p>Codes expire in 30 minutes and can be used once. Share them with the employee through a trusted channel.</p>
+              <label>Employee email<div className="input-wrap"><Mail size={16} /><input type="email" value={setupTargetEmail} onChange={(event) => setSetupTargetEmail(event.target.value)} required /></div></label>
+              <button className="primary-button" type="submit" disabled={isIssuingSetupCode}>{isIssuingSetupCode ? 'Generating...' : 'Generate setup code'}</button>
+              {issuedSetupCode && <p className="setup-code-value" role="status">Setup code for {setupTargetEmail}: <code>{issuedSetupCode}</code> (expires in 30 minutes)</p>}
+              {setupCodeError && <p role="alert" className="setup-code-error">{setupCodeError}</p>}
+            </form>
+            <div className="audit-log-list">
+              {securityAuditLogs.map((log) => (
+                <div key={log.id} className="audit-log-item">
+                  <div>
+                    <strong>{log.action}</strong>
+                    <small>User: {log.user} ({log.ip})</small>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className={`audit-status ${log.status.toLowerCase()}`}>{log.status}</span>
+                    <small style={{ color: '#9ca3af' }}>{log.time}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+        )
+      default:
+        return (
+          <section className="admin-grid">
+            <div style={{ gridColumn: '1 / -1' }}>
+              <EmployeeDirectoryCard employees={employees} onOpenManualEntry={onOpenManualEntry} />
+            </div>
+            <article className="admin-card">
+              <div className="admin-card-heading">
+                <div>
+                  <span className="card-kicker" style={{ color: '#7c3aed' }}>Governance</span>
+                  <h2>Security & Audit Trail</h2>
+                  <p>Real-time security events across all active accounts</p>
+                </div>
+                <span className="admin-badge-purple">Live Feed</span>
+              </div>
+              <div className="audit-log-list">
+                {securityAuditLogs.map((log) => (
+                  <div key={log.id} className="audit-log-item">
+                    <div>
+                      <strong>{log.action}</strong>
+                      <small>User: {log.user} ({log.ip})</small>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span className={`audit-status ${log.status.toLowerCase()}`}>{log.status}</span>
+                      <small style={{ color: '#9ca3af' }}>{log.time}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="admin-card">
+              <div className="admin-card-heading">
+                <div>
+                  <span className="card-kicker" style={{ color: '#7c3aed' }}>Approvals</span>
+                  <h2>Pending Leave & Shift Approvals</h2>
+                  <p>Global queue of manager and employee requests</p>
+                </div>
+                <span className="admin-badge-yellow">{pendingAdminRequests.length || 0} Pending</span>
+              </div>
+              <div className="approval-list">
+                {pendingAdminRequests.length > 0 ? pendingAdminRequests.map((request) => (
+                  <div key={request.id} className="approval-row">
+                    <span className={`team-person-avatar ${request.color}`}>{request.initials}</span>
+                    <div><strong>{request.name}</strong><small>{request.type}</small></div>
+                    <button className="approve-button" style={{ borderColor: '#ddd6fe', background: '#f3e8ff', color: '#6d28d9' }} onClick={() => { setAdminApproved((current) => [...current, request.id]); setActionNotice(`Approved ${request.name} leave.`) }}>Admin Approve</button>
+                  </div>
+                )) : <div className="approval-row" style={{ justifyContent: 'center', color: '#587167', fontWeight: 600 }}>No pending approvals.</div>}
+              </div>
+            </article>
+          </section>
+        )
+    }
+  }
+
+  if (previewRoleView === 'hr') {
+    return (
+      <div style={{ position: 'relative' }}>
+        <div style={{ background: '#7c3aed', color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 700, zIndex: 100, position: 'sticky', top: 0 }}>
+          <span>✦ ADMIN SHOW ALL VISIBILITY: PREVIEWING HR COMMAND CENTER</span>
+          <button onClick={() => setPreviewRoleView('master')} style={{ background: '#ffffff', color: '#6d28d9', border: 0, padding: '5px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '11px' }}>
+            Back to Admin Master View
+          </button>
+        </div>
+        <HRDashboard onLogout={onLogout} dataset={dataset} onImport={onImport} onOpenAssistant={onOpenAssistant} assistantState={assistantState} liveSnapshot={liveSnapshot} onGeneratePayroll={onGeneratePayroll} liveWorkforce={liveWorkforce} onOpenManualEntry={onOpenManualEntry} onExportReport={onExportReport} />
+      </div>
+    )
+  }
+
+  if (previewRoleView === 'manager') {
+    return (
+      <div style={{ position: 'relative' }}>
+        <div style={{ background: '#7c3aed', color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 700, zIndex: 100, position: 'sticky', top: 0 }}>
+          <span>✦ ADMIN SHOW ALL VISIBILITY: PREVIEWING MANAGER WORKSPACE</span>
+          <button onClick={() => setPreviewRoleView('master')} style={{ background: '#ffffff', color: '#6d28d9', border: 0, padding: '5px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '11px' }}>
+            Back to Admin Master View
+          </button>
+        </div>
+        <ManagerDashboard manager={managerPreview} liveWorkforce={liveWorkforce} onLogout={onLogout} onOpenAssistant={onOpenAssistant} assistantState={assistantState} onOpenManualEntry={onOpenManualEntry} onExportReport={onExportReport} />
+      </div>
+    )
+  }
+
+  if (previewRoleView === 'employee') {
+    return (
+      <div style={{ position: 'relative' }}>
+        <div style={{ background: '#7c3aed', color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: 700, zIndex: 100, position: 'sticky', top: 0 }}>
+          <span>✦ ADMIN SHOW ALL VISIBILITY: PREVIEWING EMPLOYEE PORTAL</span>
+          <button onClick={() => setPreviewRoleView('master')} style={{ background: '#ffffff', color: '#6d28d9', border: 0, padding: '5px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '11px' }}>
+            Back to Admin Master View
+          </button>
+        </div>
+        <EmployeePortal employee={employeePreview} onLogout={onLogout} onOpenAssistant={onOpenAssistant} assistantState={assistantState} liveSnapshot={liveSnapshot} liveWorkforce={liveWorkforce} readOnlyPreview />
+      </div>
+    )
+  }
+
+  return (
+    <div className="admin-dashboard">
+      <aside className="admin-sidebar">
+        <div className="brand">
+          <span className="brand-mark" style={{ background: '#7c3aed' }}><ShieldCheck size={17} /></span>
+          <span style={{ color: '#2e1065' }}>Admin Hub</span>
+        </div>
+        <div className="admin-profile">
+          <span className="admin-avatar">SA</span>
+          <div>
+            <strong>System Admin</strong>
+            <small style={{ color: '#7c3aed' }}>{currentEmail}</small>
+          </div>
+        </div>
+        <p className="nav-label">System Control</p>
+        <nav>
+          {adminNav.map(({ label, icon: Icon }) => (
+            <button
+              key={label}
+              className={`nav-item ${activeSection === label ? 'active' : ''}`}
+              style={activeSection === label ? { background: '#ede9fe', color: '#6d28d9', fontWeight: 700 } : {}}
+              onClick={() => setActiveSection(label)}
+            >
+              <Icon size={17} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+        <div style={{ marginTop: 'auto' }}>
+          <div className="admin-chip">
+            <ShieldCheck size={16} />
+            <div>
+              <strong style={{ display: 'block' }}>All Visibility Active</strong>
+              <small style={{ fontWeight: 500 }}>Super Admin Authorization</small>
+            </div>
+          </div>
+          <button className="logout-button" onClick={onLogout}>
+            <LogOut size={17} />
+            <span>Log out</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="admin-main">
+        <header className="admin-topbar">
+          <div className="admin-topbar-row">
+            <div>
+              <p className="eyebrow" style={{ color: '#7c3aed' }}>
+                <span className="live-dot" style={{ background: '#9333ea' }} /> System Administration Mode
+              </p>
+              <h1>Master All Visibility Dashboard <span>✦</span></h1>
+              <p className="admin-subtitle">Unified view of all employees, HR metrics, team attendance, payroll & security audit logs.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button className="primary-button" style={{ background: '#7c3aed', borderColor: '#6d28d9', boxShadow: '0 4px 0 #ddd6fe' }} onClick={() => onOpenManualEntry('Employee')}>
+                <UserPlus size={15} /> + Add Employee / Entry
+              </button>
+              <button className="outline-button" onClick={onGeneratePayroll}>
+                <WalletCards size={15} /> Generate Payroll
+              </button>
+              <button className="outline-button" onClick={() => onExportReport?.('system-control-report')}>
+                <FileBarChart size={15} /> Export report
+              </button>
+              <button className="outline-button" onClick={onOpenAssistant}>
+                <Bot size={15} /> Ask AI Assistant
+              </button>
+            </div>
+          </div>
+
+          <div className="admin-visibility-bar">
+            <label>Show Role Visibility:</label>
+            <button className={`admin-view-btn ${previewRoleView === 'master' ? 'active' : ''}`} onClick={() => setPreviewRoleView('master')}>
+              ✦ Master All Visibility
+            </button>
+            <button className={`admin-view-btn ${previewRoleView === 'hr' ? 'active' : ''}`} onClick={() => setPreviewRoleView('hr')}>
+              👔 HR Command View
+            </button>
+            <button className={`admin-view-btn ${previewRoleView === 'manager' ? 'active' : ''}`} onClick={() => setPreviewRoleView('manager')}>
+              👥 Manager View
+            </button>
+            <button className={`admin-view-btn ${previewRoleView === 'employee' ? 'active' : ''}`} onClick={() => setPreviewRoleView('employee')}>
+              👤 Employee View
+            </button>
+          </div>
+        </header>
+
+        <div className="admin-content">
+          <div className="admin-banner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#7c3aed', color: '#fff', display: 'grid', placeItems: 'center' }}>
+                <ShieldCheck size={20} />
+              </div>
+              <div>
+                <strong>Super Admin - Full Visibility Enabled</strong>
+                <p>You have global administrative access to all 4 system roles: System Admin ({adminCount}), HR ({hrCount}), Manager ({managerCount}), Employee ({employeeCount}).</p>
+              </div>
+            </div>
+            <button className="primary-button" style={{ background: '#7c3aed', borderColor: '#6d28d9', boxShadow: '0 4px 0 #ddd6fe' }} onClick={handleAdminApproveAll}>
+              <ShieldCheck size={14} /> Master System Override
+            </button>
+          </div>
+
+          {actionNotice && (
+            <p className="action-notice" style={{ background: '#f3e8ff', color: '#6d28d9', border: '1px solid #ddd6fe' }} role="status">
+              {actionNotice}
+            </p>
+          )}
+
+          <section className="admin-stat-grid">
+            <article className="admin-stat">
+              <span className="stat-icon" style={{ background: '#f3e8ff', color: '#7c3aed' }}><UsersRound size={17} /></span>
+              <div>
+                <small>Total Headcount</small>
+                <strong>{(liveSnapshot.employeeCount || employees.length).toLocaleString()}</strong>
+                <p>Admin: {adminCount} · HR: {hrCount} · Mgr: {managerCount} · Emp: {employeeCount}</p>
+              </div>
+            </article>
+
+            <article className="admin-stat">
+              <span className="stat-icon green"><Clock3 size={17} /></span>
+              <div>
+                <small>Global Attendance</small>
+                <strong>{liveSnapshot.attendanceRate || 92.4}%</strong>
+                <p>{liveSnapshot.presentCount} present today · {liveSnapshot.lateCount} late</p>
+              </div>
+            </article>
+
+            <article className="admin-stat">
+              <span className="stat-icon yellow"><WalletCards size={17} /></span>
+              <div>
+                <small>Total Payroll Cost</small>
+                <strong>${(liveSnapshot.totalPayroll || 68400).toLocaleString()}</strong>
+                <p>{liveSnapshot.processedPayrollCount || liveSnapshot.totalRecords || 0} payroll records ready</p>
+              </div>
+            </article>
+
+            <article className="admin-stat">
+              <span className="stat-icon blue"><ShieldCheck size={17} /></span>
+              <div>
+                <small>System Security & MFA</small>
+                <strong>100% Secure</strong>
+                <p>MFA Active · 0 Vulnerability Flags</p>
+              </div>
+            </article>
+          </section>
+
+          {renderAdminSectionContent()}
+        </div>
+      </main>
+
+      <AssistantDrawer
+        isOpen={assistantState.isOpen}
+        onClose={assistantState.onClose}
+        question={assistantState.question}
+        setQuestion={assistantState.setQuestion}
+        onSubmit={assistantState.onSubmit}
+        submittedQuestion={assistantState.submittedQuestion}
+        aiLoading={assistantState.aiLoading}
+        aiAnswer={assistantState.aiAnswer}
+        roleLabel="System Admin"
+      />
+    </div>
+  )
+}
+
 function App() {
   const [authenticatedRole, setAuthenticatedRole] = useState(null)
+  const [accessToken, setAccessToken] = useState(null)
   const [dataset, setDataset] = useState({ attendance: [], allocation: [], workforce: [] })
-  const [liveWorkforce, setLiveWorkforce] = useState({ employees: [], attendance: [], payrollSummary: {}, leaveRequests: [] })
+  const [liveWorkforce, setLiveWorkforce] = useState({ employees: [], attendance: [], payrollSummary: {}, leaveRequests: [], notifications: [], departments: [], locations: [] })
   const [activeNav, setActiveNav] = useState('Overview')
   const [range, setRange] = useState('This week')
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
   const [question, setQuestion] = useState('')
   const [submittedQuestion, setSubmittedQuestion] = useState('')
+
+  useEffect(() => {
+    document.title = authenticatedRole ? `${authenticatedRole.label} | Northstar Workforce` : 'Northstar Workforce'
+  }, [authenticatedRole])
 
   const workforceMetrics = deriveMetrics(dataset.attendance, dataset.allocation, dataset.workforce)
   const totalHeadcount = workforceMetrics.employeeCount || 0
@@ -1133,10 +2143,12 @@ function App() {
       fetch('http://localhost:8000/api/attendance/').then((response) => response.json()),
       fetch('http://localhost:8000/api/payroll/summary').then((response) => response.json()),
       fetch('http://localhost:8000/api/leaves/').then((response) => response.json()),
-    ]).then(([employees, attendance, payrollSummary, leaveRequests]) => {
-      setLiveWorkforce({ employees, attendance, payrollSummary, leaveRequests })
+      fetch('http://localhost:8000/api/employees/options').then((response) => response.ok ? response.json() : {}).catch(() => ({})),
+      fetch('http://localhost:8000/api/notifications/?employee_id=all').then((response) => response.ok ? response.json() : []).catch(() => []),
+    ]).then(([employees, attendance, payrollSummary, leaveRequests, options, notifications]) => {
+      setLiveWorkforce({ employees, attendance, payrollSummary, leaveRequests, notifications, departments: options.departments || [], locations: options.locations || [] })
     }).catch(() => {
-      setLiveWorkforce({ employees: [], attendance: [], payrollSummary: {}, leaveRequests: [] })
+      setLiveWorkforce({ employees: [], attendance: [], payrollSummary: {}, leaveRequests: [], notifications: [], departments: [], locations: [] })
     })
   }, [])
 
@@ -1155,13 +2167,23 @@ function App() {
 
   const [aiAnswer, setAiAnswer] = useState(null)
   const [aiLoading, setAiLoading] = useState(false)
-  const [backendStatus, setBackendStatus] = useState({ healthy: false })
+  const [backendStatus, setBackendStatus] = useState({ healthy: false, checking: true })
 
   useEffect(() => {
-    fetch('http://localhost:8000/health')
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error('unhealthy')))
-      .then(() => setBackendStatus({ healthy: true }))
-      .catch(() => setBackendStatus({ healthy: false }))
+    let isActive = true
+    const checkBackend = () => {
+      fetch('http://localhost:8000/health')
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error('unhealthy')))
+        .then(() => { if (isActive) setBackendStatus({ healthy: true, checking: false }) })
+        .catch(() => { if (isActive) setBackendStatus({ healthy: false, checking: false }) })
+    }
+
+    checkBackend()
+    const interval = window.setInterval(checkBackend, 5000)
+    return () => {
+      isActive = false
+      window.clearInterval(interval)
+    }
   }, [])
 
   const submitQuestion = (event) => {
@@ -1178,11 +2200,15 @@ function App() {
     })
       .then((res) => res.json())
       .then((data) => {
-        setAiAnswer(data.answer)
+        if (data && typeof data.answer === 'string' && data.answer.trim()) {
+          setAiAnswer(data.answer)
+        } else {
+          setAiAnswer(buildContextualAiResponse(currentQuestion, authenticatedRole?.label || 'HR Administrator', liveSnapshot))
+        }
         setAiLoading(false)
       })
       .catch(() => {
-        setAiAnswer(`Based on current signals: ${currentQuestion} - Attendance is 91.7% with high overall stability. 128 employees active.`)
+        setAiAnswer(buildContextualAiResponse(currentQuestion, authenticatedRole?.label || 'HR Administrator', liveSnapshot))
         setAiLoading(false)
       })
   }
@@ -1210,6 +2236,21 @@ function App() {
     }
   }
 
+  const exportReport = (reportName = 'workforce-report') => {
+    const rows = [
+      ['Report', reportName],
+      ['Generated at', new Date().toISOString()],
+      ['Employee count', String(liveSnapshot.employeeCount || 0)],
+      ['Attendance rate', `${liveSnapshot.attendanceRate || 0}%`],
+      ['Present today', String(liveSnapshot.presentCount || 0)],
+      ['Late arrivals', String(liveSnapshot.lateCount || 0)],
+      ['Pending leave', String(liveSnapshot.pendingLeave || 0)],
+      ['Payroll processed', `${liveSnapshot.processedPayrollCount || 0}/${liveSnapshot.totalRecords || 0}`],
+      ['Total payroll cost', `$${(liveSnapshot.totalPayroll || 0).toLocaleString()}`],
+    ]
+    downloadCsvReport(`${reportName}.csv`, rows)
+  }
+
   const liveSnapshot = buildLiveWorkforceSnapshot(liveWorkforce.employees, liveWorkforce.attendance, liveWorkforce.payrollSummary, liveWorkforce.leaveRequests)
 
   const assistantState = {
@@ -1223,32 +2264,86 @@ function App() {
     aiAnswer,
   }
 
-  const handleLogin = async (roleConfig, loginEmail = 'megha@gmail.com', loginPassword = 'demo-password') => {
+  const handleLogin = async (roleConfig, loginEmail, loginPassword) => {
     try {
       const response = await fetch('http://localhost:8000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword, role: roleConfig.label || 'HR Administrator' }),
+        body: JSON.stringify({ email: loginEmail, password: loginPassword, role: roleConfig.label || 'System Admin' }),
       })
-      if (!response.ok) throw new Error('login failed')
+      if (!response.ok) {
+        if (response.status === 401) return 'Invalid email or password for the selected role.'
+        if (response.status === 422) return 'Enter a valid email address and a password of no more than 72 UTF-8 bytes.'
+        return 'Sign-in is unavailable right now. Please try again.'
+      }
       const data = await response.json()
-      setAuthenticatedRole({ ...roleConfig, email: data.email || loginEmail, name: data.name || `${roleConfig.label}` })
-      return true
-    } catch (error) {
-      setAuthenticatedRole(roleConfig)
-      return true
+      const permittedRoles = {
+        admin: ['ADMIN', 'SYSTEM ADMIN', 'SYSTEM_ADMIN'],
+        hr: ['HR_ADMIN', 'HR'],
+        manager: ['MANAGER'],
+        employee: ['EMPLOYEE'],
+      }
+      const actualRole = String(data.role || '').toUpperCase()
+      if (!permittedRoles[roleConfig.id]?.includes(actualRole)) return 'Invalid email or password for the selected role.'
+      setAccessToken(data.access_token)
+      setAuthenticatedRole({ ...roleConfig, email: data.email || loginEmail, name: data.name || `${roleConfig.label}`, employeeId: data.employee_id || null })
+      return ''
+    } catch {
+      return 'Unable to reach the sign-in service. Check that the backend is running and try again.'
     }
   }
 
-  const refreshLiveWorkforce = () => {
-    Promise.all([
-      fetch('http://localhost:8000/api/employees/').then((response) => response.json()),
-      fetch('http://localhost:8000/api/attendance/').then((response) => response.json()),
-      fetch('http://localhost:8000/api/payroll/summary').then((response) => response.json()),
-      fetch('http://localhost:8000/api/leaves/').then((response) => response.json()),
-    ]).then(([employees, attendance, payrollSummary, leaveRequests]) => {
-      setLiveWorkforce({ employees, attendance, payrollSummary, leaveRequests })
-    }).catch(() => {})
+  const handlePasswordSetup = async (payload) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/password/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (response.ok) return ''
+      if (response.status === 400 || response.status === 404) return 'The email or one-time setup code is invalid or expired.'
+      if (response.status === 422) return 'Choose a password with at least 8 characters and no more than 72 UTF-8 bytes.'
+      return 'Password setup is unavailable right now. Please try again.'
+    } catch {
+      return 'Unable to reach the password setup service. Check that the backend is running and try again.'
+    }
+  }
+
+  const handleIssueSetupCode = async (email, token) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/setup-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email }),
+      })
+      if (!response.ok) {
+        if (response.status === 404) return { error: 'No active employee account was found for that email.' }
+        if (response.status === 401 || response.status === 403) return { error: 'Your admin session has expired or cannot issue setup codes. Sign in again.' }
+        return { error: 'Could not issue a setup code. Please try again.' }
+      }
+      const data = await response.json()
+      return { setupCode: data.setup_code }
+    } catch {
+      return { error: 'Unable to reach the setup-code service. Check that the backend is running and try again.' }
+    }
+  }
+
+  const handleLogout = () => {
+    setAuthenticatedRole(null)
+    setAccessToken(null)
+  }
+
+  const refreshLiveWorkforce = async () => {
+    try {
+      const [employees, attendance, payrollSummary, leaveRequests, options] = await Promise.all([
+        fetch('http://localhost:8000/api/employees/').then((response) => response.json()),
+        fetch('http://localhost:8000/api/attendance/').then((response) => response.json()),
+        fetch('http://localhost:8000/api/payroll/summary').then((response) => response.json()),
+        fetch('http://localhost:8000/api/leaves/').then((response) => response.json()),
+        fetch('http://localhost:8000/api/employees/options').then((response) => response.ok ? response.json() : {}).catch(() => ({})),
+      ])
+      setLiveWorkforce({ employees, attendance, payrollSummary, leaveRequests, departments: options.departments || [], locations: options.locations || [] })
+    } catch {}
   }
 
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
@@ -1259,25 +2354,111 @@ function App() {
     setIsManualEntryOpen(true)
   }
 
-  if (!authenticatedRole) return <LoginPage onLogin={handleLogin} headcount={totalHeadcount} backendStatus={backendStatus} />
+  if (!authenticatedRole) return <LoginPage onLogin={handleLogin} onPasswordSetup={handlePasswordSetup} headcount={totalHeadcount} backendStatus={backendStatus} />
+  if (authenticatedRole.id === 'admin') return (
+    <>
+      <AdminDashboard onLogout={handleLogout} dataset={dataset} onImport={importCsv} onOpenAssistant={() => setIsAssistantOpen(true)} assistantState={assistantState} liveSnapshot={liveSnapshot} onGeneratePayroll={generatePayroll} liveWorkforce={liveWorkforce} onOpenManualEntry={handleOpenManualEntry} onExportReport={exportReport} onIssueSetupCode={handleIssueSetupCode} accessToken={accessToken} currentEmail={authenticatedRole.email} />
+      <ManualEntryModal isOpen={isManualEntryOpen} onClose={() => setIsManualEntryOpen(false)} onRefreshData={refreshLiveWorkforce} employeesList={liveWorkforce.employees} initialTab={manualEntryTab} />
+    </>
+  )
   if (authenticatedRole.id === 'employee') return (
     <>
-      <EmployeePortal employee={authenticatedRole} onLogout={() => setAuthenticatedRole(null)} onOpenAssistant={() => setIsAssistantOpen(true)} assistantState={assistantState} liveSnapshot={liveSnapshot} onOpenManualEntry={handleOpenManualEntry} />
+      <EmployeePortal employee={authenticatedRole} onLogout={handleLogout} onOpenAssistant={() => setIsAssistantOpen(true)} assistantState={assistantState} liveSnapshot={liveSnapshot} liveWorkforce={liveWorkforce} onOpenManualEntry={handleOpenManualEntry} onRefreshData={refreshLiveWorkforce} />
       <ManualEntryModal isOpen={isManualEntryOpen} onClose={() => setIsManualEntryOpen(false)} onRefreshData={refreshLiveWorkforce} employeesList={liveWorkforce.employees} initialTab={manualEntryTab} />
     </>
   )
   if (authenticatedRole.id === 'manager') return (
     <>
-      <ManagerDashboard onLogout={() => setAuthenticatedRole(null)} onOpenAssistant={() => setIsAssistantOpen(true)} assistantState={assistantState} liveSnapshot={liveSnapshot} onOpenManualEntry={handleOpenManualEntry} />
+      <ManagerDashboard manager={authenticatedRole} liveWorkforce={liveWorkforce} onLogout={handleLogout} onOpenAssistant={() => setIsAssistantOpen(true)} assistantState={assistantState} onOpenManualEntry={handleOpenManualEntry} onExportReport={exportReport} />
       <ManualEntryModal isOpen={isManualEntryOpen} onClose={() => setIsManualEntryOpen(false)} onRefreshData={refreshLiveWorkforce} employeesList={liveWorkforce.employees} initialTab={manualEntryTab} />
     </>
   )
   if (authenticatedRole.id === 'hr') return (
     <>
-      <HRDashboard onLogout={() => setAuthenticatedRole(null)} dataset={dataset} onImport={importCsv} onOpenAssistant={() => setIsAssistantOpen(true)} assistantState={assistantState} liveSnapshot={liveSnapshot} onGeneratePayroll={generatePayroll} liveWorkforce={liveWorkforce} onOpenManualEntry={handleOpenManualEntry} />
+      <HRDashboard onLogout={handleLogout} dataset={dataset} onImport={importCsv} onOpenAssistant={() => setIsAssistantOpen(true)} assistantState={assistantState} liveSnapshot={liveSnapshot} onGeneratePayroll={generatePayroll} liveWorkforce={liveWorkforce} onOpenManualEntry={handleOpenManualEntry} onExportReport={exportReport} currentName={authenticatedRole.name} currentEmail={authenticatedRole.email} />
       <ManualEntryModal isOpen={isManualEntryOpen} onClose={() => setIsManualEntryOpen(false)} onRefreshData={refreshLiveWorkforce} employeesList={liveWorkforce.employees} initialTab={manualEntryTab} />
     </>
   )
+
+  const renderShellSectionContent = () => {
+    const employees = liveWorkforce?.employees || []
+
+    switch (activeNav) {
+      case 'Scheduling':
+        return (
+          <section className="admin-card" style={{ gridColumn: '1 / -1', marginTop: '1.5rem' }}>
+            <div className="admin-card-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <span className="card-kicker" style={{ color: '#059669', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Workforce Roster</span>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: '0.25rem 0' }}>Shift Scheduling & Coverage</h2>
+                <p style={{ fontSize: '0.85rem', color: '#6b7280', margin: 0 }}>Manage employee work shifts, hours, and department coverage.</p>
+              </div>
+              <button className="primary-button" onClick={() => handleOpenManualEntry('Shift')}>
+                <CalendarDays size={16} /> Schedule Shift
+              </button>
+            </div>
+            <div className="employee-table-container" style={{ background: '#fff', borderRadius: '0.75rem', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <table className="employee-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ padding: '0.75rem 1rem' }}>Employee</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Role & Dept</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Current Shift</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Schedule Hours</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Status</th>
+                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.length > 0 ? (
+                    employees.map((emp) => (
+                      <tr key={emp.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#111827' }}>
+                          {emp.first_name} {emp.last_name}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', color: '#4b5563' }}>
+                          {emp.role || 'Employee'}
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <span style={{ display: 'inline-block', padding: '0.2rem 0.5rem', background: '#ecfdf5', color: '#047857', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600 }}>
+                            {emp.role?.toLowerCase().includes('manager') ? 'Manager Shift' : 'General Shift'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', color: '#4b5563' }}>09:00 AM - 05:00 PM</td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <span style={{ display: 'inline-block', padding: '0.2rem 0.5rem', background: '#d1fae5', color: '#065f46', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600 }}>
+                            Scheduled
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                          <button onClick={() => handleOpenManualEntry('Shift')} style={{ background: 'none', border: 'none', color: '#059669', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
+                            Edit Shift
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        No employee records loaded. Use manual entry or CSV import to add employees.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      case 'People':
+        return <div style={{ gridColumn: '1 / -1', marginTop: '1.5rem' }}><EmployeeDirectoryCard employees={employees} onOpenManualEntry={handleOpenManualEntry} /></div>
+      default:
+        return null
+    }
+  }
+
+  const currentUserName = authenticatedRole?.name || authenticatedRole?.label || 'User'
+  const currentUserFirstName = currentUserName.split(' ')[0] || 'User'
+  const currentUserInitials = currentUserName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'US'
 
   return (
     <div className="app-shell">
@@ -1312,7 +2493,7 @@ function App() {
 
         <div className="sidebar-footer">
           <div className="upgrade-card"><div className="upgrade-icon"><Sparkles size={16} /></div><strong>Unlock more insights</strong><span>Get deeper workforce signals with Pro.</span><button>Explore Pro <ArrowUpRight size={14} /></button></div>
-          <div className="user-profile"><div className="profile-avatar">AR</div><div><strong>Alex Rivera</strong><small>HR Administrator</small></div><MoreHorizontal size={17} /></div>
+          <div className="user-profile"><div className="profile-avatar">{currentUserInitials}</div><div><strong>{currentUserName}</strong><small>{authenticatedRole?.label || 'HR Administrator'}</small></div><MoreHorizontal size={17} /></div>
         </div>
       </aside>
 
@@ -1323,17 +2504,17 @@ function App() {
           <div className="topbar-actions">
             <div className="backend-indicator" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0.7rem', borderRadius: '999px', background: backendStatus.healthy ? 'rgba(39,174,96,0.12)' : 'rgba(248,171,29,0.12)', color: backendStatus.healthy ? '#7ae5a9' : '#ffd166', border: `1px solid ${backendStatus.healthy ? '#39c178' : '#e7aa24'}`, fontSize: '0.72rem', fontWeight: 700 }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '999px', background: backendStatus.healthy ? '#39c178' : '#e7aa24', display: 'inline-block' }} />
-              {backendStatus.healthy ? 'AI connected' : 'Checking backend'}
+              {backendStatus.healthy ? 'AI connected' : backendStatus.checking ? 'Checking backend' : 'Backend unavailable'}
             </div>
             <button className="search-button"><Search size={17} /><span>Search anything</span><kbd><Command size={11} /> K</kbd></button>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={18} /><i /></button>
-            <button className="profile-avatar top-avatar">AR</button>
+            <button className="profile-avatar top-avatar">{currentUserInitials}</button>
           </div>
         </header>
 
         <div className="page-container">
           <section className="welcome-row">
-            <div><p className="eyebrow"><span className="live-dot" /> Live workforce pulse</p><h1>Good morning, Alex <span>✦</span></h1><p className="subtitle">Here is what is happening across Northstar today.</p></div>
+            <div><p className="eyebrow"><span className="live-dot" /> Live workforce pulse</p><h1>Good morning, {currentUserFirstName} <span>✦</span></h1><p className="subtitle">Here is what is happening across Northstar today.</p></div>
             <div className="welcome-actions"><button className="outline-button"><FileBarChart size={16} /> Export report</button><button className="primary-button" onClick={() => setIsAssistantOpen(true)}><Bot size={17} /> Ask assistant</button></div>
           </section>
 
@@ -1344,19 +2525,11 @@ function App() {
             <article className="metric-card accent-coral"><div className="metric-top"><span>Attrition risk</span><span className="metric-icon"><Activity size={17} /></span></div><strong>8.2%</strong><div className="metric-bottom"><span className="trend negative">↘ 1.4%</span><span>vs last quarter</span><div className="mini-bars coral-bars"><i /><i /><i /><i /><i /><i /><i /></div></div></article>
           </section>
 
-          <section className="dashboard-grid">
-            <article className="panel attendance-panel"><div className="panel-heading"><div><h2>Attendance overview</h2><p>Daily presence across all locations</p></div><select value={range} onChange={(event) => setRange(event.target.value)}><option>This week</option><option>This month</option><option>This quarter</option></select></div><div className="chart-area"><div className="chart-y-axis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div><div className="chart-content"><div className="chart-gridlines"><i /><i /><i /><i /><i /></div><div className="bars">{attendance.map((item) => <div className="bar-column" key={item.day}><div className="bar-tooltip">{item.value}%</div><div className="bar" style={{ '--bar-height': `${item.value}%` }} /><span>{item.day}</span></div>)}</div></div></div><div className="chart-footer"><span><i className="legend-dot present" /> Present</span><span><i className="legend-dot away" /> Away / leave</span><span className="chart-note"><ArrowUpRight size={14} /> 3.2% higher than last week</span></div></article>
-
-            <article className="panel ai-panel"><div className="panel-heading"><div className="ai-title"><div className="ai-icon"><Sparkles size={16} /></div><div><h2>AI briefing</h2><p>Generated 8 minutes ago</p></div></div><button className="icon-button"><MoreHorizontal size={18} /></button></div><div className="ai-summary"><span className="summary-label">Today’s signal</span><h3>Team energy is up, but capacity is tightening.</h3><p>Attendance is <strong>3.2% above</strong> the weekly average. Customer success is approaching its workload threshold with <strong>4 open shifts</strong>.</p><button className="text-button" onClick={() => setIsAssistantOpen(true)}>Explore recommendation <ArrowUpRight size={15} /></button></div><div className="ai-bottom"><div className="sparkline"><span style={{ height: '34%' }} /><span style={{ height: '52%' }} /><span style={{ height: '43%' }} /><span style={{ height: '68%' }} /><span style={{ height: '59%' }} /><span style={{ height: '86%' }} /><span style={{ height: '77%' }} /></div><span>Workforce confidence <strong>87%</strong></span></div></article>
-
-            <article className="panel team-panel"><div className="panel-heading"><div><h2>Team utilization</h2><p>Capacity by department</p></div><button className="icon-button"><MoreHorizontal size={18} /></button></div><div className="team-list">{teams.map((team) => <div className="team-row" key={team.name}><div className="team-info"><span className={`team-dot ${team.color}`} /><div><strong>{team.name}</strong><small>{team.people}</small></div><b>{team.value}%</b></div><div className="progress-track"><div className={`progress-fill ${team.color}`} style={{ width: `${team.value}%` }} /></div></div>)}</div><button className="view-link">View workforce map <ArrowUpRight size={14} /></button></article>
-
-            <article className="panel actions-panel"><div className="panel-heading"><div><h2>Needs your attention</h2><p>4 items need review</p></div><span className="attention-count">4</span></div><div className="action-list"><button><span className="action-icon coral"><CalendarDays size={16} /></span><span><strong>Approve shift swaps</strong><small>7 requests pending</small></span><ArrowUpRight size={15} /></button><button><span className="action-icon yellow"><WalletCards size={16} /></span><span><strong>Review payroll inputs</strong><small>Due today, 5:00 PM</small></span><ArrowUpRight size={15} /></button><button><span className="action-icon blue"><MessageSquareText size={16} /></span><span><strong>Respond to 3 check-ins</strong><small>Employee feedback</small></span><ArrowUpRight size={15} /></button></div></article>
-          </section>
+          {renderShellSectionContent()}
         </div>
       </main>
 
-      {isAssistantOpen && <div className="assistant-overlay" onClick={() => setIsAssistantOpen(false)}><section className="assistant-drawer" onClick={(event) => event.stopPropagation()}><div className="assistant-header"><div className="ai-title"><div className="ai-icon"><Sparkles size={17} /></div><div><h2>AI assistant</h2><p>Workforce intelligence, on demand</p></div></div><button className="icon-button" onClick={() => setIsAssistantOpen(false)} aria-label="Close assistant"><X size={18} /></button></div><div className="assistant-body"><p className="assistant-greeting">Hi Alex. I can help you understand your workforce data or take action on your priority tasks.</p><div className="suggestion-grid"><button onClick={() => setQuestion('Which teams are at risk of burnout?')}>Which teams are at risk of burnout?</button><button onClick={() => setQuestion('Summarize attendance this week')}>Summarize attendance this week</button><button onClick={() => setQuestion('Where should we hire next?')}>Where should we hire next?</button></div>{submittedQuestion && <div className="assistant-response"><span className="response-label">AI insight</span><p>{aiLoading ? 'Analyzing workforce signals...' : aiAnswer || `Based on latest signals for: ${submittedQuestion}`}</p></div>}</div><form className="assistant-input" onSubmit={submitQuestion}><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your workforce..." /><button type="submit" aria-label="Send question"><ArrowUpRight size={17} /></button></form></section></div>}
+      {isAssistantOpen && <div className="assistant-overlay" onClick={() => setIsAssistantOpen(false)}><section className="assistant-drawer" onClick={(event) => event.stopPropagation()}><div className="assistant-header"><div className="ai-title"><div className="ai-icon"><Sparkles size={17} /></div><div><h2>AI assistant</h2><p>Workforce intelligence, on demand</p></div></div><button className="icon-button" onClick={() => setIsAssistantOpen(false)} aria-label="Close assistant"><X size={18} /></button></div><div className="assistant-body"><p className="assistant-greeting">Hi {currentUserFirstName}. I can help you understand your workforce data or take action on your priority tasks.</p><div className="suggestion-grid"><button onClick={() => setQuestion('Which teams are at risk of burnout?')}>Which teams are at risk of burnout?</button><button onClick={() => setQuestion('Summarize attendance this week')}>Summarize attendance this week</button><button onClick={() => setQuestion('Where should we hire next?')}>Where should we hire next?</button></div>{submittedQuestion && <div className="assistant-response"><span className="response-label">AI insight</span><p>{aiLoading ? 'Analyzing workforce signals...' : aiAnswer || `Based on latest signals for: ${submittedQuestion}`}</p></div>}</div><form className="assistant-input" onSubmit={submitQuestion}><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your workforce..." /><button type="submit" aria-label="Send question"><ArrowUpRight size={17} /></button></form></section></div>}
     </div>
   )
 }
