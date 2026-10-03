@@ -1,3 +1,4 @@
+import os
 from aws_cdk import (
     Stack,
     Duration,
@@ -11,6 +12,8 @@ from constructs import Construct
 class WorkforceRdsStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        is_dev = os.getenv("ENVIRONMENT", "production").lower() in ["dev", "development"]
 
         # 1. Create VPC for RDS database isolation
         self.vpc = ec2.Vpc(
@@ -64,8 +67,8 @@ class WorkforceRdsStack(Stack):
             database_name="workforce_db",
             credentials=rds.Credentials.from_generated_secret("postgres"), # Securely stored in AWS Secrets Manager
             backup_retention=Duration.days(7),
-            removal_policy=RemovalPolicy.DESTROY,
-            deletion_protection=False
+            removal_policy=RemovalPolicy.DESTROY if is_dev else RemovalPolicy.RETAIN,
+            deletion_protection=not is_dev
         )
 
         # 4. CloudFormation Outputs for backend database configuration

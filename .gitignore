@@ -22,8 +22,10 @@ backend/*/__pycache__/
 .env
 *.env
 backend/.env
+backend/.env.demo
 .env.local
 .env.*.local
+backend/workforce_demo.db
 
 # AWS Infrastructure & Build Artifacts
 cdk.out/

@@ -34,6 +34,7 @@ import {
 import './App.css'
 import './manager-notifications.css'
 import { resolveDefaultManagerId } from './employeeAssignment.js'
+import { API_BASE_URL, DEMO_LOGIN_EMAILS } from './config.js'
 
 const navItems = [
   { label: 'Overview', icon: LayoutDashboard },
@@ -63,10 +64,10 @@ const teams = [
 ]
 
 const roles = [
-  { id: 'admin', label: 'System Admin', description: 'Full system visibility, security & global access', icon: ShieldCheck, accent: 'purple', email: 'admin@gmail.com' },
-  { id: 'hr', label: 'HR Administrator', description: 'People analytics, payroll and compliance', icon: BriefcaseBusiness, accent: 'green', email: 'shwethaa@gmail.com' },
-  { id: 'manager', label: 'Manager', description: 'Team attendance, goals and approvals', icon: UsersRound, accent: 'blue', email: 'maya.roberts@northstar.example' },
-  { id: 'employee', label: 'Employee', description: 'Self-service, shifts and time off', icon: UserRound, accent: 'yellow', email: 'aarav.sharma@northstar.example' },
+  { id: 'admin', label: 'System Admin', description: 'Full system visibility, security & global access', icon: ShieldCheck, accent: 'purple', email: DEMO_LOGIN_EMAILS.admin },
+  { id: 'hr', label: 'HR Administrator', description: 'People analytics, payroll and compliance', icon: BriefcaseBusiness, accent: 'green', email: DEMO_LOGIN_EMAILS.hr },
+  { id: 'manager', label: 'Manager', description: 'Team attendance, goals and approvals', icon: UsersRound, accent: 'blue', email: DEMO_LOGIN_EMAILS.manager },
+  { id: 'employee', label: 'Employee', description: 'Self-service, shifts and time off', icon: UserRound, accent: 'yellow', email: DEMO_LOGIN_EMAILS.employee },
 ]
 
 function parseCsv(text) {
@@ -415,7 +416,7 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
   useEffect(() => {
     if (!employeeId) return undefined
     let active = true
-    const refreshNotifications = () => fetch(`http://localhost:8000/api/notifications/?employee_id=${encodeURIComponent(employeeId)}`)
+    const refreshNotifications = () => fetch(`${API_BASE_URL}/api/notifications/?employee_id=${encodeURIComponent(employeeId)}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load notifications')))
       .then((data) => { if (active) setNotifications(data) })
       .catch(() => { if (active) setNotifications([]) })
@@ -430,7 +431,7 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
   const unreadNotificationCount = notifications.filter((notification) => !notification.is_read).length
   const openEmployeeNotification = async (notification) => {
     if (!notification.is_read) {
-      const response = await fetch(`http://localhost:8000/api/notifications/${encodeURIComponent(notification.id)}/read?employee_id=${encodeURIComponent(employeeId)}`, { method: 'POST' })
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${encodeURIComponent(notification.id)}/read?employee_id=${encodeURIComponent(employeeId)}`, { method: 'POST' })
       if (response.ok) setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, is_read: true } : item))
     }
     setNotificationsOpen(false)
@@ -439,7 +440,7 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
   useEffect(() => {
     if (!employee.employeeId) return undefined
     let active = true
-    fetch(`http://localhost:8000/api/employees/${encodeURIComponent(employee.employeeId)}/workspace`)
+    fetch(`${API_BASE_URL}/api/employees/${encodeURIComponent(employee.employeeId)}/workspace`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Employee workspace unavailable')))
       .then((data) => { if (active) setWorkspace(data) })
       .catch(() => { if (active) setWorkspace(null) })
@@ -471,7 +472,7 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
     }
     setProfileSaving(true)
     try {
-      const response = await fetch(`http://localhost:8000/api/employees/${encodeURIComponent(employeeId)}`, {
+      const response = await fetch(`${API_BASE_URL}/api/employees/${encodeURIComponent(employeeId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profileEditForm),
@@ -480,7 +481,7 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
         setActionNotice('Profile details updated successfully!')
         setIsProfileModalOpen(false)
         if (onRefreshData) await onRefreshData()
-        fetch(`http://localhost:8000/api/employees/${encodeURIComponent(employeeId)}/workspace`)
+        fetch(`${API_BASE_URL}/api/employees/${encodeURIComponent(employeeId)}/workspace`)
           .then((res) => res.ok ? res.json() : null)
           .then((data) => { if (data) setWorkspace(data) })
           .catch(() => {})
@@ -536,7 +537,7 @@ function EmployeePortal({ employee, onLogout, onOpenAssistant, assistantState, l
     const checkInTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 
     try {
-      const response = await fetch('http://localhost:8000/api/attendance/verify-biometric', {
+      const response = await fetch(`${API_BASE_URL}/api/attendance/verify-biometric`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -723,7 +724,7 @@ function ManagerDashboard({ manager, liveWorkforce, onLogout, onOpenAssistant, a
   useEffect(() => {
     if (!managerId) return undefined
     let active = true
-    const refreshTeam = () => fetch(`http://localhost:8000/api/employees/${encodeURIComponent(managerId)}/team`)
+    const refreshTeam = () => fetch(`${API_BASE_URL}/api/employees/${encodeURIComponent(managerId)}/team`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load manager team')))
       .then((data) => { if (active) setTeamData(data) })
       .catch(() => { if (active) setTeamData(null) })
@@ -737,7 +738,7 @@ function ManagerDashboard({ manager, liveWorkforce, onLogout, onOpenAssistant, a
   useEffect(() => {
     if (!managerId) return undefined
     let active = true
-    const refreshNotifications = () => fetch(`http://localhost:8000/api/notifications/?employee_id=${encodeURIComponent(managerId)}`)
+    const refreshNotifications = () => fetch(`${API_BASE_URL}/api/notifications/?employee_id=${encodeURIComponent(managerId)}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load notifications')))
       .then((data) => { if (active) setNotifications(data) })
       .catch(() => { if (active) setNotifications([]) })
@@ -766,7 +767,7 @@ function ManagerDashboard({ manager, liveWorkforce, onLogout, onOpenAssistant, a
     { label: 'Workforce utilization', icon: WalletCards },
   ]
   const approveTeamLeave = async (leaveId) => {
-    const response = await fetch(`http://localhost:8000/api/leaves/approve/${encodeURIComponent(leaveId)}`, { method: 'POST' })
+    const response = await fetch(`${API_BASE_URL}/api/leaves/approve/${encodeURIComponent(leaveId)}`, { method: 'POST' })
     if (!response.ok) return setActionNotice('Unable to approve this leave request. Refresh and try again.')
     setTeamData((current) => ({ ...current, pending_leaves: current.pending_leaves.filter((item) => item.id !== leaveId), summary: { ...current.summary, pending_leave_count: Math.max(0, current.summary.pending_leave_count - 1) } }))
     setActionNotice('Leave request approved.')
@@ -798,7 +799,7 @@ function ManagerDashboard({ manager, liveWorkforce, onLogout, onOpenAssistant, a
   }
   const openManagerNotification = async (notification) => {
     if (!notification.is_read) {
-      const response = await fetch(`http://localhost:8000/api/notifications/${encodeURIComponent(notification.id)}/read?employee_id=${encodeURIComponent(managerId)}`, { method: 'POST' })
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${encodeURIComponent(notification.id)}/read?employee_id=${encodeURIComponent(managerId)}`, { method: 'POST' })
       if (response.ok) setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, is_read: true } : item))
     }
     if (notification.alert_type === 'LEAVE_REQUEST') handleManagerAction('Open approval queue')
@@ -1053,7 +1054,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
   useEffect(() => {
     if (!isOpen) return undefined
     let active = true
-    fetch('http://localhost:8000/api/employees/options')
+    fetch(`${API_BASE_URL}/api/employees/options`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Employee options unavailable')))
       .then((options) => {
         if (!active) return
@@ -1103,7 +1104,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
           employee_code: empForm.employee_code || `EMP-${Date.now().toString().slice(-5)}`,
           base_salary: calculatedSalary,
         }
-        const res = await fetch('http://localhost:8000/api/employees/', {
+        const res = await fetch(`${API_BASE_URL}/api/employees/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(employeePayload),
@@ -1114,7 +1115,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
         }
 
         const createdEmployee = await res.json()
-        await fetch('http://localhost:8000/api/payroll/manual', {
+        await fetch(`${API_BASE_URL}/api/payroll/manual`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1129,7 +1130,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
 
         setMessage(`Employee added with $${Number(createdEmployee.base_salary || calculatedSalary).toLocaleString()} annual salary and an automatic shift assignment.`)
       } else if (activeTab === 'Attendance') {
-        const res = await fetch('http://localhost:8000/api/attendance/', {
+        const res = await fetch(`${API_BASE_URL}/api/attendance/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(attForm),
@@ -1137,14 +1138,14 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
         if (!res.ok) throw new Error('Failed to mark attendance')
         setMessage('Attendance logged successfully!')
       } else if (activeTab === 'Shift') {
-        const shiftResponse = await fetch('http://localhost:8000/api/shifts/', {
+        const shiftResponse = await fetch(`${API_BASE_URL}/api/shifts/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ shift_name: shiftForm.shift_name, start_time: shiftForm.start_time, end_time: shiftForm.end_time, location_id: shiftForm.location_id, status: 'Published' }),
         })
         if (!shiftResponse.ok) throw new Error('Failed to create shift')
         const createdShift = await shiftResponse.json()
-        const res = await fetch('http://localhost:8000/api/shifts/assign', {
+        const res = await fetch(`${API_BASE_URL}/api/shifts/assign`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ employee_id: shiftForm.employee_id, shift_id: createdShift.id, assignment_date: shiftForm.assignment_date }),
@@ -1152,7 +1153,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
         if (!res.ok) throw new Error('Failed to assign shift')
         setMessage(`Shift created and assigned at ${employeeOptions.locations.find((item) => item.id === shiftForm.location_id)?.name || 'the selected location'}.`)
       } else if (activeTab === 'Leave') {
-        const res = await fetch('http://localhost:8000/api/leaves/', {
+        const res = await fetch(`${API_BASE_URL}/api/leaves/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(leaveForm),
@@ -1160,7 +1161,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
         if (!res.ok) throw new Error('Failed to submit leave request')
         setMessage('Leave request submitted successfully!')
       } else if (activeTab === 'Timesheet') {
-        const res = await fetch('http://localhost:8000/api/timesheets/log', {
+        const res = await fetch(`${API_BASE_URL}/api/timesheets/log`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tsForm),
@@ -1168,7 +1169,7 @@ function ManualEntryModal({ isOpen, onClose, onRefreshData, employeesList = [], 
         if (!res.ok) throw new Error('Failed to log timesheet')
         setMessage('Timesheet entry saved successfully!')
       } else if (activeTab === 'Payroll') {
-        const res = await fetch('http://localhost:8000/api/payroll/manual', {
+        const res = await fetch(`${API_BASE_URL}/api/payroll/manual`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payForm),
@@ -2139,12 +2140,12 @@ function App() {
     }).catch(() => {})
 
     Promise.all([
-      fetch('http://localhost:8000/api/employees/').then((response) => response.json()),
-      fetch('http://localhost:8000/api/attendance/').then((response) => response.json()),
-      fetch('http://localhost:8000/api/payroll/summary').then((response) => response.json()),
-      fetch('http://localhost:8000/api/leaves/').then((response) => response.json()),
-      fetch('http://localhost:8000/api/employees/options').then((response) => response.ok ? response.json() : {}).catch(() => ({})),
-      fetch('http://localhost:8000/api/notifications/?employee_id=all').then((response) => response.ok ? response.json() : []).catch(() => []),
+      fetch(`${API_BASE_URL}/api/employees/`).then((response) => response.json()),
+      fetch(`${API_BASE_URL}/api/attendance/`).then((response) => response.json()),
+      fetch(`${API_BASE_URL}/api/payroll/summary`).then((response) => response.json()),
+      fetch(`${API_BASE_URL}/api/leaves/`).then((response) => response.json()),
+      fetch(`${API_BASE_URL}/api/employees/options`).then((response) => response.ok ? response.json() : {}).catch(() => ({})),
+      fetch(`${API_BASE_URL}/api/notifications/?employee_id=all`).then((response) => response.ok ? response.json() : []).catch(() => []),
     ]).then(([employees, attendance, payrollSummary, leaveRequests, options, notifications]) => {
       setLiveWorkforce({ employees, attendance, payrollSummary, leaveRequests, notifications, departments: options.departments || [], locations: options.locations || [] })
     }).catch(() => {
@@ -2172,7 +2173,7 @@ function App() {
   useEffect(() => {
     let isActive = true
     const checkBackend = () => {
-      fetch('http://localhost:8000/health')
+      fetch(`${API_BASE_URL}/health`)
         .then((response) => response.ok ? response.json() : Promise.reject(new Error('unhealthy')))
         .then(() => { if (isActive) setBackendStatus({ healthy: true, checking: false }) })
         .catch(() => { if (isActive) setBackendStatus({ healthy: false, checking: false }) })
@@ -2193,7 +2194,7 @@ function App() {
     setSubmittedQuestion(currentQuestion)
     setAiLoading(true)
 
-    fetch('http://localhost:8000/api/ai/chatbot', {
+    fetch(`${API_BASE_URL}/api/ai/chatbot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: currentQuestion, role: authenticatedRole?.label || 'HR Administrator' })
@@ -2215,7 +2216,7 @@ function App() {
 
   const generatePayroll = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/payroll/generate', {
+      const response = await fetch(`${API_BASE_URL}/api/payroll/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pay_period: '2026-08' }),
@@ -2266,7 +2267,7 @@ function App() {
 
   const handleLogin = async (roleConfig, loginEmail, loginPassword) => {
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail, password: loginPassword, role: roleConfig.label || 'System Admin' }),
@@ -2295,7 +2296,7 @@ function App() {
 
   const handlePasswordSetup = async (payload) => {
     try {
-      const response = await fetch('http://localhost:8000/api/auth/password/setup', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/password/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -2311,7 +2312,7 @@ function App() {
 
   const handleIssueSetupCode = async (email, token) => {
     try {
-      const response = await fetch('http://localhost:8000/api/auth/setup-codes', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/setup-codes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ email }),
@@ -2336,11 +2337,11 @@ function App() {
   const refreshLiveWorkforce = async () => {
     try {
       const [employees, attendance, payrollSummary, leaveRequests, options] = await Promise.all([
-        fetch('http://localhost:8000/api/employees/').then((response) => response.json()),
-        fetch('http://localhost:8000/api/attendance/').then((response) => response.json()),
-        fetch('http://localhost:8000/api/payroll/summary').then((response) => response.json()),
-        fetch('http://localhost:8000/api/leaves/').then((response) => response.json()),
-        fetch('http://localhost:8000/api/employees/options').then((response) => response.ok ? response.json() : {}).catch(() => ({})),
+        fetch(`${API_BASE_URL}/api/employees/`).then((response) => response.json()),
+        fetch(`${API_BASE_URL}/api/attendance/`).then((response) => response.json()),
+        fetch(`${API_BASE_URL}/api/payroll/summary`).then((response) => response.json()),
+        fetch(`${API_BASE_URL}/api/leaves/`).then((response) => response.json()),
+        fetch(`${API_BASE_URL}/api/employees/options`).then((response) => response.ok ? response.json() : {}).catch(() => ({})),
       ])
       setLiveWorkforce({ employees, attendance, payrollSummary, leaveRequests, departments: options.departments || [], locations: options.locations || [] })
     } catch {}

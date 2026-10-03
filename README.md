@@ -35,6 +35,28 @@ $env:ADMIN_INITIAL_PASSWORD = "choose-a-unique-password"
 $env:JWT_SECRET_KEY = "set-a-long-random-secret"
 ```
 
+## Local demo accounts for each role
+
+To try the role-based sign-in using the existing workforce records without changing the working database, run this from the repository root in PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe backend\scripts\create_demo_database.py
+```
+
+The script creates an isolated `backend/workforce_demo.db`, gives one active existing account in each role a randomly generated demo password, and writes local-only backend and Vite environment files. It does not add employee or workforce records and refuses to overwrite existing demo files. Copy the one-time credentials printed by the script, then start the backend from `backend/`:
+
+```powershell
+..\.venv\Scripts\python.exe -m uvicorn main:app --env-file .env.demo --host 127.0.0.1 --port 8000
+```
+
+In a second terminal, restart the Vite server from the repository root:
+
+```powershell
+npm run dev -- --host 127.0.0.1
+```
+
+Choose the corresponding role card and use the credentials printed by the script. The role cards are prefilled with the matching existing email addresses. The demo database contains a copy of employee data, so keep it local and do not deploy or share it. The original `backend/workforce_db.db` is not modified.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
